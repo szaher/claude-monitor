@@ -535,3 +535,101 @@ func TestSearchMessages(t *testing.T) {
 		t.Errorf("expected 1 result with limit 1, got %d", len(results2))
 	}
 }
+
+func TestInsertSessionMetric(t *testing.T) {
+	dir := t.TempDir()
+	database, err := InitDB(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+	defer database.Close()
+
+	now := time.Now().UTC()
+	InsertSession(database, &models.Session{
+		ID: "s1", ProjectPath: "/test", ProjectName: "test", StartedAt: now,
+	})
+	InsertMessage(database, &models.Message{
+		ID: "m1", SessionID: "s1", Type: "assistant", Timestamp: now,
+	})
+
+	m := &models.SessionMetric{
+		SessionID: "s1", MessageID: "m1", Speed: "fast",
+		ServiceTier: "standard", CacheEphemeral5mTokens: 500,
+		Timestamp: now,
+	}
+	if err := InsertSessionMetric(database, m); err != nil {
+		t.Fatalf("InsertSessionMetric: %v", err)
+	}
+
+	var speed string
+	database.QueryRow("SELECT speed FROM session_metrics WHERE session_id = ?", "s1").Scan(&speed)
+	if speed != "fast" {
+		t.Errorf("speed = %q, want %q", speed, "fast")
+	}
+}
+
+func TestUpdateSessionNotesTags(t *testing.T) {
+	dir := t.TempDir()
+	database, err := InitDB(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+	defer database.Close()
+
+	now := time.Now().UTC()
+	InsertSession(database, &models.Session{
+		ID: "s1", ProjectPath: "/test", ProjectName: "test", StartedAt: now,
+	})
+
+	if err := UpdateSessionNotesTags(database, "s1", "my note", "tag1,tag2"); err != nil {
+		t.Fatalf("UpdateSessionNotesTags: %v", err)
+	}
+
+	var notes, tags string
+	database.QueryRow("SELECT notes, tags FROM sessions WHERE id = ?", "s1").Scan(&notes, &tags)
+	if notes != "my note" || tags != "tag1,tag2" {
+		t.Errorf("notes=%q tags=%q, want 'my note' 'tag1,tag2'", notes, tags)
+	}
+}
+
+func TestBudgetCRUD(t *testing.T) {
+	dir := t.TempDir()
+	database, err := InitDB(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+	defer database.Close()
+
+	b := &models.Budget{
+		Name: "Daily", Period: "daily", AmountUSD: 50.0, Enabled: true,
+	}
+	id, err := InsertBudget(database, b)
+	if err != nil {
+		t.Fatalf("InsertBudget: %v", err)
+	}
+	if id == 0 {
+		t.Fatal("InsertBudget returned 0 id")
+	}
+
+	b.ID = int(id)
+	b.AmountUSD = 100.0
+	if err := UpdateBudget(database, b); err != nil {
+		t.Fatalf("UpdateBudget: %v", err)
+	}
+
+	var amount float64
+	database.QueryRow("SELECT amount_usd FROM budgets WHERE id = ?", id).Scan(&amount)
+	if amount != 100.0 {
+		t.Errorf("amount = %f, want 100.0", amount)
+	}
+
+	if err := DeleteBudget(database, int(id)); err != nil {
+		t.Fatalf("DeleteBudget: %v", err)
+	}
+
+	var count int
+	database.QueryRow("SELECT COUNT(*) FROM budgets").Scan(&count)
+	if count != 0 {
+		t.Errorf("budget not deleted: count=%d", count)
+	}
+}

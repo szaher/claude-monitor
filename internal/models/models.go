@@ -40,14 +40,14 @@ type Message struct {
 }
 
 type ToolCall struct {
-	ID           string    `json:"id"`
-	MessageID    string    `json:"message_id"`
-	SessionID    string    `json:"session_id"`
-	ToolName     string    `json:"tool_name"`
-	ToolInput    string    `json:"tool_input"`
-	ToolResponse string    `json:"tool_response"`
-	Success      bool      `json:"success"`
-	Error        string    `json:"error"`
+	ID            string    `json:"id"`
+	MessageID     string    `json:"message_id"`
+	SessionID     string    `json:"session_id"`
+	ToolName      string    `json:"tool_name"`
+	ToolInput     string    `json:"tool_input"`
+	ToolResponse  string    `json:"tool_response"`
+	Success       bool      `json:"success"`
+	Error         string    `json:"error"`
 	DurationMS    int       `json:"duration_ms"`
 	Timestamp     time.Time `json:"timestamp"`
 	Stderr        string    `json:"stderr"`
@@ -113,11 +113,10 @@ type SessionCommit struct {
 }
 
 type Budget struct {
-	ID          int       `json:"id"`
-	Name        string    `json:"name"`
-	ProjectPath string    `json:"project_path"`
-	Period      string    `json:"period"`
-	AmountUSD   float64   `json:"amount_usd"`
-	Enabled     bool      `json:"enabled"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID          int     `json:"id"`
+	Name        string  `json:"name"`
+	ProjectPath string  `json:"project_path"`
+	Period      string  `json:"period"`
+	AmountUSD   float64 `json:"amount_usd"`
+	Enabled     bool    `json:"enabled"`
 }
