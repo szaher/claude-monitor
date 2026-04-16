@@ -181,6 +181,16 @@ const API = {
         return API.get('/api/budgets/status');
     },
 
+    /** Get git commits for a session. */
+    getSessionCommits(sessionId) {
+        return API.get(`/api/sessions/${sessionId}/commits`);
+    },
+
+    /** Trigger git sync for a session. */
+    triggerGitSync(sessionId) {
+        return API.post('/api/git-sync', { session_id: sessionId });
+    },
+
     /** Build an export download URL with the given params. */
     getExportURL(params) {
         const url = new URL('/api/export', window.location.origin);

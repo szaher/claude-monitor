@@ -390,6 +390,52 @@ const SessionsPage = {
                 }
             }
 
+            // Git Commits section
+            const commitsData = await API.getSessionCommits(this.selectedSession).catch(() => null);
+
+            if (commitsData) {
+                const commits = commitsData.commits || [];
+                const commitsHtml = `
+                <div class="card" style="margin-bottom:1.5rem">
+                    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+                        <h3>Git Commits (${commits.length})</h3>
+                        <button id="git-sync-btn" class="btn btn-secondary" style="font-size:0.8rem">Sync Git</button>
+                    </div>
+                    <div class="card-body">
+                        ${commits.length > 0 ? `
+                        <table class="table">
+                            <thead><tr><th>Hash</th><th>Message</th><th>Changes</th><th>Time</th></tr></thead>
+                            <tbody>${commits.map(c => `
+                                <tr>
+                                    <td style="font-family:monospace;font-size:0.85rem">${c.commit_hash.substring(0, 7)}</td>
+                                    <td>${this._esc(c.commit_message)}</td>
+                                    <td style="white-space:nowrap">
+                                        <span style="color:var(--success)">+${c.insertions}</span>
+                                        <span style="color:var(--danger)">-${c.deletions}</span>
+                                        <span style="color:var(--text-secondary)">(${c.files_changed} files)</span>
+                                    </td>
+                                    <td style="white-space:nowrap">${new Date(c.committed_at).toLocaleString()}</td>
+                                </tr>
+                            `).join('')}</tbody>
+                        </table>` : '<p class="text-muted">No commits found. Click "Sync Git" to scan.</p>'}
+                    </div>
+                </div>`;
+                const threadEl = area.querySelector('.conversation-thread');
+                if (threadEl) {
+                    threadEl.insertAdjacentHTML('beforebegin', commitsHtml);
+                } else {
+                    area.insertAdjacentHTML('beforeend', commitsHtml);
+                }
+
+                area.querySelector('#git-sync-btn')?.addEventListener('click', async () => {
+                    await API.triggerGitSync(this.selectedSession);
+                    if (typeof App !== 'undefined' && App.toast) {
+                        App.toast('Git sync started', 'info');
+                    }
+                    setTimeout(() => this.loadDetail(), 3000);
+                });
+            }
+
             // Bind Notes auto-save on blur
             const notesEl = document.getElementById('session-notes');
             if (notesEl) {

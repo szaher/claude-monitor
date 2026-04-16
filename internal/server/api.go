@@ -136,6 +136,11 @@ func (s *Server) handleSessionDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if strings.Contains(path, "/commits") {
+		s.handleSessionCommits(w, r)
+		return
+	}
+
 	if r.Method == http.MethodPatch {
 		s.handleSessionPatch(w, r)
 		return
