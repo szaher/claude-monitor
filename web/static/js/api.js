@@ -152,6 +152,35 @@ const API = {
         return API.get('/api/tags');
     },
 
+    /** List all budgets. */
+    getBudgets() {
+        return API.get('/api/budgets');
+    },
+
+    /** Create a new budget. */
+    createBudget(budget) {
+        return API.post('/api/budgets', budget);
+    },
+
+    /** Update an existing budget. */
+    updateBudget(id, budget) {
+        return fetch(`/api/budgets/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(budget),
+        }).then(r => r.json());
+    },
+
+    /** Delete a budget. */
+    deleteBudget(id) {
+        return fetch(`/api/budgets/${id}`, { method: 'DELETE' }).then(r => r.json());
+    },
+
+    /** Get budget status with current spend. */
+    getBudgetStatus() {
+        return API.get('/api/budgets/status');
+    },
+
     /** Build an export download URL with the given params. */
     getExportURL(params) {
         const url = new URL('/api/export', window.location.origin);

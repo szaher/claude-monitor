@@ -86,11 +86,12 @@ const CostPage = {
         this.destroyCharts();
 
         try {
-            const [dailyData, modelData, projectData, efficiencyData] = await Promise.all([
+            const [dailyData, modelData, projectData, efficiencyData, budgetStatus] = await Promise.all([
                 API.getDailyStats(90),
                 API.getModelStats(),
                 API.getProjectStats(),
                 API.getTokenEfficiency().catch(() => null),
+                API.getBudgetStatus().catch(() => null),
             ]);
 
             const days = (dailyData && dailyData.days) || [];
@@ -104,6 +105,7 @@ const CostPage = {
             this.renderCacheAnalysis(days);
             this.renderCostProjection(days);
             this.renderTokenEfficiency(efficiencyData);
+            this.renderBudgets(budgetStatus);
         } catch (err) {
             console.error('Cost page load error:', err);
             App.toast('Failed to load cost data: ' + err.message, 'error');
@@ -491,6 +493,108 @@ const CostPage = {
             </div>` : ''}
         `;
         container.appendChild(section);
+    },
+
+    /* ---- Budgets ---- */
+    renderBudgets(data) {
+        const container = document.querySelector('.cost-page');
+        if (!container) return;
+
+        const section = document.createElement('div');
+        section.className = 'budget-section mt-2';
+
+        const budgets = (data && data.budgets) || [];
+
+        let tableRows = '';
+        if (budgets.length > 0) {
+            tableRows = budgets.map(b => {
+                const pct = (b.percentage || 0).toFixed(1);
+                let barColor = 'var(--accent-success)';
+                if (b.status === 'exceeded') barColor = 'var(--accent-danger)';
+                else if (b.status === 'warning') barColor = 'var(--accent-warning)';
+
+                return `<tr>
+                    <td>${this._esc(b.name)}</td>
+                    <td>${this._esc(b.project_path || 'All')}</td>
+                    <td>${this._esc(b.period)}</td>
+                    <td class="text-right">${formatCost(b.amount_usd)}</td>
+                    <td class="text-right">${formatCost(b.current_spend)}</td>
+                    <td style="min-width:120px;">
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <div style="flex:1;background:var(--bg-tertiary);border-radius:4px;height:8px;overflow:hidden;">
+                                <div style="background:${barColor};height:100%;width:${Math.min(parseFloat(pct), 100)}%;border-radius:4px;"></div>
+                            </div>
+                            <span style="font-size:0.8rem;color:${barColor};font-weight:600;">${pct}%</span>
+                        </div>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-danger" onclick="CostPage._deleteBudget(${b.id})" style="padding:2px 8px;font-size:0.75rem;">Delete</button>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        section.innerHTML = `
+            <div class="card">
+                <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+                    <h3>Budgets</h3>
+                    <button class="btn btn-sm" onclick="CostPage._addBudget()" style="padding:4px 12px;">Add Budget</button>
+                </div>
+                ${budgets.length > 0 ? `
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Project</th>
+                                <th>Period</th>
+                                <th class="text-right">Budget</th>
+                                <th class="text-right">Spent</th>
+                                <th>Progress</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>${tableRows}</tbody>
+                    </table>
+                </div>` : '<div class="empty-state"><p>No budgets configured. Click "Add Budget" to create one.</p></div>'}
+            </div>
+        `;
+        container.appendChild(section);
+    },
+
+    async _addBudget() {
+        const name = prompt('Budget name:');
+        if (!name) return;
+        const period = prompt('Period (daily, weekly, monthly):', 'monthly');
+        if (!period || !['daily', 'weekly', 'monthly'].includes(period)) {
+            if (typeof App !== 'undefined' && App.toast) App.toast('Invalid period. Use daily, weekly, or monthly.', 'error');
+            return;
+        }
+        const amountStr = prompt('Budget amount (USD):', '100');
+        if (!amountStr) return;
+        const amount = parseFloat(amountStr);
+        if (isNaN(amount) || amount <= 0) {
+            if (typeof App !== 'undefined' && App.toast) App.toast('Invalid amount.', 'error');
+            return;
+        }
+        try {
+            await API.createBudget({ name, period, amount_usd: amount });
+            const container = document.getElementById('main-content');
+            if (container) { container.innerHTML = ''; this.render(container); }
+        } catch (err) {
+            if (typeof App !== 'undefined' && App.toast) App.toast('Failed to create budget: ' + err.message, 'error');
+        }
+    },
+
+    async _deleteBudget(id) {
+        if (!confirm('Delete this budget?')) return;
+        try {
+            await API.deleteBudget(id);
+            const container = document.getElementById('main-content');
+            if (container) { container.innerHTML = ''; this.render(container); }
+        } catch (err) {
+            if (typeof App !== 'undefined' && App.toast) App.toast('Failed to delete budget: ' + err.message, 'error');
+        }
     },
 
     /* ---- Helpers ---- */

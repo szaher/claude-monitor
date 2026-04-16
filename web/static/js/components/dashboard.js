@@ -122,13 +122,14 @@ const DashboardPage = {
         this.charts = {};
 
         try {
-            const [stats, daily, tools, projects, sessions, patterns] = await Promise.all([
+            const [stats, daily, tools, projects, sessions, patterns, budgetStatus] = await Promise.all([
                 API.getStats(),
                 API.getDailyStats(365),
                 API.getToolStats(),
                 API.getProjectStats(),
                 API.getSessions({ limit: 10 }),
                 API.getPromptPatterns().catch(() => null),
+                API.getBudgetStatus().catch(() => null),
             ]);
 
             this.renderStatCards(stats);
@@ -138,6 +139,7 @@ const DashboardPage = {
             this.renderProjectsList((projects && projects.projects) || []);
             this.renderRecentSessions((sessions && sessions.sessions) || []);
             this.renderPatterns(patterns);
+            this.renderBudgetWarnings(budgetStatus);
         } catch (err) {
             console.error('Dashboard load error:', err);
             if (typeof App !== 'undefined' && App.toast) {
@@ -593,6 +595,39 @@ const DashboardPage = {
                 },
             },
         });
+    },
+
+    /* ------------------------------------------------------------------
+       8. Budget Warnings
+    ------------------------------------------------------------------ */
+    renderBudgetWarnings(data) {
+        if (!data || !data.budgets) return;
+
+        const alerts = data.budgets.filter(b => b.status === 'warning' || b.status === 'exceeded');
+        if (alerts.length === 0) return;
+
+        const container = document.querySelector('.dashboard');
+        if (!container) return;
+
+        const statsCards = document.getElementById('stats-cards');
+        if (!statsCards) return;
+
+        const banner = document.createElement('div');
+        banner.className = 'mt-2';
+        banner.innerHTML = `
+            <div style="background:var(--accent-warning, #e5a921);color:#000;border-radius:8px;padding:12px 16px;">
+                <strong>Budget Alerts</strong>
+                <ul style="margin:8px 0 0 16px;padding:0;">
+                    ${alerts.map(b => {
+                        const icon = b.status === 'exceeded' ? '[EXCEEDED]' : '[WARNING]';
+                        return `<li style="margin-bottom:4px;">
+                            ${icon} <strong>${this._esc(b.name)}</strong>: ${formatCost(b.current_spend)} / ${formatCost(b.amount_usd)} (${(b.percentage || 0).toFixed(1)}%) - ${b.status}
+                        </li>`;
+                    }).join('')}
+                </ul>
+            </div>
+        `;
+        statsCards.after(banner);
     },
 
     /* ------------------------------------------------------------------
