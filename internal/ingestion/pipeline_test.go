@@ -28,7 +28,7 @@ func TestPipeline_ProcessHookEvent_SessionStart(t *testing.T) {
 	var broadcasted []byte
 	p := NewPipeline(database, func(data []byte) {
 		broadcasted = data
-	})
+	}, nil)
 
 	hookEvent := map[string]interface{}{
 		"hook_event_name": "SessionStart",
@@ -77,7 +77,7 @@ func TestPipeline_ProcessHookEvent_SessionStart(t *testing.T) {
 
 func TestPipeline_ProcessHookEvent_SessionEnd(t *testing.T) {
 	database := setupTestDB(t)
-	p := NewPipeline(database, nil)
+	p := NewPipeline(database, nil, nil)
 
 	// First create a session
 	now := time.Now().UTC().Truncate(time.Second)
@@ -114,7 +114,7 @@ func TestPipeline_ProcessHookEvent_SessionEnd(t *testing.T) {
 
 func TestPipeline_ProcessHookEvent_Stop(t *testing.T) {
 	database := setupTestDB(t)
-	p := NewPipeline(database, nil)
+	p := NewPipeline(database, nil, nil)
 
 	// First create a session
 	now := time.Now().UTC().Truncate(time.Second)
@@ -151,7 +151,7 @@ func TestPipeline_ProcessHookEvent_Stop(t *testing.T) {
 
 func TestPipeline_ProcessHookEvent_PostToolUse(t *testing.T) {
 	database := setupTestDB(t)
-	p := NewPipeline(database, nil)
+	p := NewPipeline(database, nil, nil)
 
 	// Create session and message for FK constraints
 	now := time.Now().UTC().Truncate(time.Second)
@@ -202,7 +202,7 @@ func TestPipeline_ProcessHookEvent_PostToolUse(t *testing.T) {
 
 func TestPipeline_ProcessHookEvent_SubagentStart(t *testing.T) {
 	database := setupTestDB(t)
-	p := NewPipeline(database, nil)
+	p := NewPipeline(database, nil, nil)
 
 	// Create session for FK constraint
 	now := time.Now().UTC().Truncate(time.Second)
@@ -241,7 +241,7 @@ func TestPipeline_ProcessHookEvent_SubagentStart(t *testing.T) {
 
 func TestPipeline_ProcessHookEvent_SubagentStop(t *testing.T) {
 	database := setupTestDB(t)
-	p := NewPipeline(database, nil)
+	p := NewPipeline(database, nil, nil)
 
 	// Create session and subagent
 	now := time.Now().UTC().Truncate(time.Second)
@@ -288,7 +288,7 @@ func TestPipeline_ProcessHookEvent_SubagentStop(t *testing.T) {
 
 func TestPipeline_ProcessHookEvent_PreToolUse(t *testing.T) {
 	database := setupTestDB(t)
-	p := NewPipeline(database, nil)
+	p := NewPipeline(database, nil, nil)
 
 	hookEvent := map[string]interface{}{
 		"hook_event_name": "PreToolUse",
@@ -305,7 +305,7 @@ func TestPipeline_ProcessHookEvent_PreToolUse(t *testing.T) {
 
 func TestPipeline_ProcessLogEntry(t *testing.T) {
 	database := setupTestDB(t)
-	p := NewPipeline(database, nil)
+	p := NewPipeline(database, nil, nil)
 
 	// A user message log entry
 	entry := map[string]interface{}{
@@ -351,7 +351,7 @@ func TestPipeline_ProcessLogEntry(t *testing.T) {
 
 func TestPipeline_ProcessLogEntry_AssistantWithToolUse(t *testing.T) {
 	database := setupTestDB(t)
-	p := NewPipeline(database, nil)
+	p := NewPipeline(database, nil, nil)
 
 	// Create session first
 	now := time.Now().UTC().Truncate(time.Second)
@@ -420,7 +420,7 @@ func TestPipeline_ProcessLogEntry_AssistantWithToolUse(t *testing.T) {
 
 func TestPipeline_BatchWrite(t *testing.T) {
 	database := setupTestDB(t)
-	p := NewPipeline(database, nil)
+	p := NewPipeline(database, nil, nil)
 
 	eventCh := make(chan []byte, 100)
 
@@ -453,7 +453,7 @@ func TestPipeline_BatchWrite(t *testing.T) {
 
 func TestPipeline_ProcessHookEvent_InvalidJSON(t *testing.T) {
 	database := setupTestDB(t)
-	p := NewPipeline(database, nil)
+	p := NewPipeline(database, nil, nil)
 
 	err := p.ProcessHookEvent([]byte("not json"))
 	if err == nil {
@@ -463,7 +463,7 @@ func TestPipeline_ProcessHookEvent_InvalidJSON(t *testing.T) {
 
 func TestPipeline_ProcessLogEntry_InvalidJSON(t *testing.T) {
 	database := setupTestDB(t)
-	p := NewPipeline(database, nil)
+	p := NewPipeline(database, nil, nil)
 
 	err := p.ProcessLogEntry([]byte("not json"))
 	if err == nil {

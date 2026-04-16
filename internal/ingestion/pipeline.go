@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/szaher/claude-monitor/internal/config"
 	"github.com/szaher/claude-monitor/internal/db"
 	"github.com/szaher/claude-monitor/internal/models"
 	"github.com/szaher/claude-monitor/internal/parser"
@@ -17,24 +19,54 @@ import (
 // (hook events) and watcher (log entries), normalizes it, deduplicates, and
 // writes to the database.
 type Pipeline struct {
-	database  *sql.DB
-	batchSize int
-	batchTime time.Duration
-	stopCh    chan struct{}
-	wg        sync.WaitGroup
-	broadcast func([]byte) // callback for WebSocket broadcasting
+	database   *sql.DB
+	batchSize  int
+	batchTime  time.Duration
+	stopCh     chan struct{}
+	wg         sync.WaitGroup
+	broadcast  func([]byte) // callback for WebSocket broadcasting
+	costConfig map[string]config.ModelPricing
 }
 
 // NewPipeline creates a new Pipeline with default batch settings
 // (50 events or 500ms flush interval).
-func NewPipeline(database *sql.DB, broadcast func([]byte)) *Pipeline {
-	return &Pipeline{
-		database:  database,
-		batchSize: 50,
-		batchTime: 500 * time.Millisecond,
-		stopCh:    make(chan struct{}),
-		broadcast: broadcast,
+func NewPipeline(database *sql.DB, broadcast func([]byte), costConfig map[string]config.ModelPricing) *Pipeline {
+	if costConfig == nil {
+		costConfig = make(map[string]config.ModelPricing)
 	}
+	return &Pipeline{
+		database:   database,
+		batchSize:  50,
+		batchTime:  500 * time.Millisecond,
+		stopCh:     make(chan struct{}),
+		broadcast:  broadcast,
+		costConfig: costConfig,
+	}
+}
+
+// CalculateCost estimates the cost of a message based on model pricing.
+func (p *Pipeline) CalculateCost(model string, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens int) float64 {
+	pricing, ok := p.costConfig[model]
+	if !ok {
+		// Try partial match (model names may have version suffixes)
+		for name, pr := range p.costConfig {
+			if strings.Contains(model, name) || strings.Contains(name, model) {
+				pricing = pr
+				ok = true
+				break
+			}
+		}
+	}
+	if !ok {
+		return 0
+	}
+
+	cost := float64(inputTokens) / 1_000_000 * pricing.Input
+	cost += float64(outputTokens) / 1_000_000 * pricing.Output
+	cost += float64(cacheReadTokens) / 1_000_000 * pricing.CacheRead
+	cost += float64(cacheWriteTokens) / 1_000_000 * pricing.CacheWrite
+
+	return cost
 }
 
 // ProcessHookEvent processes a single hook event from the receiver.
@@ -153,9 +185,9 @@ func (p *Pipeline) ProcessLogEntry(data []byte) error {
 			}
 		}
 
-		// Update session token counts by incrementing
+		// Update session token counts and cost by incrementing
 		if entry.Message.Usage.InputTokens > 0 || entry.Message.Usage.OutputTokens > 0 {
-			p.incrementSessionTokens(entry.SessionID, entry.Message.Usage)
+			p.incrementSessionTokens(entry.SessionID, entry.Message.Usage, entry.Message.Model)
 		}
 	}
 
@@ -337,17 +369,22 @@ func (p *Pipeline) ensureSession(entry *parser.LogEntry) error {
 	return db.InsertSession(p.database, session)
 }
 
-// incrementSessionTokens adds usage tokens to the session's running totals.
-func (p *Pipeline) incrementSessionTokens(sessionID string, usage parser.Usage) {
+// incrementSessionTokens adds usage tokens to the session's running totals
+// and updates the estimated cost.
+func (p *Pipeline) incrementSessionTokens(sessionID string, usage parser.Usage, model string) {
+	cost := p.CalculateCost(model, usage.InputTokens, usage.OutputTokens,
+		usage.CacheReadInputTokens, usage.CacheCreationInputTokens)
+
 	p.database.Exec(`
 		UPDATE sessions SET
 			total_input_tokens = total_input_tokens + ?,
 			total_output_tokens = total_output_tokens + ?,
 			total_cache_read_tokens = total_cache_read_tokens + ?,
-			total_cache_write_tokens = total_cache_write_tokens + ?
+			total_cache_write_tokens = total_cache_write_tokens + ?,
+			estimated_cost_usd = estimated_cost_usd + ?
 		WHERE id = ?`,
 		usage.InputTokens, usage.OutputTokens,
 		usage.CacheReadInputTokens, usage.CacheCreationInputTokens,
-		sessionID,
+		cost, sessionID,
 	)
 }

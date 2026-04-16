@@ -1,9 +1,11 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -73,7 +75,7 @@ func Serve(args []string) error {
 	defer hub.Close()
 
 	// Start pipeline (batch processor)
-	pipeline := ingestion.NewPipeline(database, hub.Broadcast)
+	pipeline := ingestion.NewPipeline(database, hub.Broadcast, cfg.Cost.Models)
 	go pipeline.StartBatchProcessor(eventCh)
 
 	// Start receiver (Unix socket)
@@ -90,12 +92,17 @@ func Serve(args []string) error {
 	logEventCh := make(chan *ingestion.LogFileEvent, 100)
 	watcher := ingestion.NewWatcher(claudeProjectsDir, logEventCh)
 
+	// Stop channel for the watcher bridge
+	watcherStopCh := make(chan struct{})
+
 	// Only start watcher if the directory exists
 	if _, err := os.Stat(claudeProjectsDir); err == nil {
 		if err := watcher.Start(); err != nil {
 			log.Printf("Warning: could not start log watcher: %v", err)
 		} else {
 			defer watcher.Stop()
+			// Start the bridge that reads file contents and feeds lines to the pipeline
+			go startWatcherBridge(logEventCh, eventCh, watcherStopCh)
 		}
 	} else {
 		log.Printf("Note: %s does not exist, log watcher not started", claudeProjectsDir)
@@ -143,11 +150,68 @@ func Serve(args []string) error {
 		return fmt.Errorf("http server: %w", err)
 	}
 
-	// Graceful shutdown: stop pipeline after server is done
+	// Graceful shutdown: stop watcher bridge, then pipeline
+	close(watcherStopCh)
 	pipeline.Stop()
 
 	log.Println("Claude Monitor stopped")
 	return nil
+}
+
+// startWatcherBridge reads from the watcher's LogFileEvent channel, opens the
+// modified/created files, reads new lines since the last offset, and sends each
+// line as []byte to the pipeline's event channel.
+func startWatcherBridge(logEventCh <-chan *ingestion.LogFileEvent, eventCh chan<- []byte, stopCh <-chan struct{}) {
+	offsets := make(map[string]int64)
+
+	for {
+		select {
+		case <-stopCh:
+			return
+		case event, ok := <-logEventCh:
+			if !ok {
+				return
+			}
+			if event.Type == ingestion.EventFileDeleted {
+				delete(offsets, event.Path)
+				continue
+			}
+
+			f, err := os.Open(event.Path)
+			if err != nil {
+				continue
+			}
+
+			offset := offsets[event.Path]
+			if offset > 0 {
+				f.Seek(offset, io.SeekStart)
+			}
+
+			scanner := bufio.NewScanner(f)
+			buf := make([]byte, 0, 64*1024)
+			scanner.Buffer(buf, 1024*1024)
+
+			for scanner.Scan() {
+				line := scanner.Bytes()
+				if len(line) == 0 {
+					continue
+				}
+				lineCopy := make([]byte, len(line))
+				copy(lineCopy, line)
+
+				select {
+				case eventCh <- lineCopy:
+				default:
+					// Channel full, drop to avoid blocking
+				}
+			}
+
+			// Update offset to current position
+			pos, _ := f.Seek(0, io.SeekCurrent)
+			offsets[event.Path] = pos
+			f.Close()
+		}
+	}
 }
 
 // openBrowser opens the given URL in the user's default browser.

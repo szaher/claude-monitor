@@ -10,6 +10,7 @@ import (
 
 	"github.com/szaher/claude-monitor/internal/config"
 	"github.com/szaher/claude-monitor/internal/db"
+	"github.com/szaher/claude-monitor/internal/ingestion"
 	"github.com/szaher/claude-monitor/internal/models"
 	"github.com/szaher/claude-monitor/internal/parser"
 )
@@ -58,6 +59,9 @@ func Import(args []string) error {
 		return fmt.Errorf("init database: %w", err)
 	}
 	defer database.Close()
+
+	// Create pipeline for cost calculation
+	costPipeline := ingestion.NewPipeline(database, nil, cfg.Cost.Models)
 
 	fmt.Printf("Scanning %s for session logs...\n", scanPath)
 
@@ -147,6 +151,7 @@ func Import(args []string) error {
 		// Process all entries
 		var sessionInputTokens, sessionOutputTokens int
 		var sessionCacheRead, sessionCacheWrite int
+		var sessionCost float64
 		var msgCount, tcCount int
 		effectiveSessionID := session.ID
 
@@ -188,6 +193,15 @@ func Import(args []string) error {
 				sessionCacheRead += entry.Message.Usage.CacheReadInputTokens
 				sessionCacheWrite += entry.Message.Usage.CacheCreationInputTokens
 
+				// Calculate cost for this message
+				sessionCost += costPipeline.CalculateCost(
+					entry.Message.Model,
+					entry.Message.Usage.InputTokens,
+					entry.Message.Usage.OutputTokens,
+					entry.Message.Usage.CacheReadInputTokens,
+					entry.Message.Usage.CacheCreationInputTokens,
+				)
+
 				toolCalls := parser.ExtractToolCalls(entry.Message.Content)
 				for _, tc := range toolCalls {
 					inputJSON, _ := json.Marshal(tc.Input)
@@ -209,13 +223,14 @@ func Import(args []string) error {
 			}
 		}
 
-		// Update session with accumulated token totals
+		// Update session with accumulated token totals and cost
 		session.TotalInputTokens = sessionInputTokens
 		session.TotalOutputTokens = sessionOutputTokens
 		session.TotalCacheReadTokens = sessionCacheRead
 		session.TotalCacheWriteTokens = sessionCacheWrite
+		session.EstimatedCostUSD = sessionCost
 
-		// Re-insert to update token counts (upsert)
+		// Re-insert to update token counts and cost (upsert)
 		if err := db.InsertSession(database, session); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: update session %s: %v\n", session.ID, err)
 		}
