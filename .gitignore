@@ -1,0 +1,15 @@
+# Worktrees
+.worktrees/
+
+# Binaries
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test coverage
+*.out
+
+# Go workspace file
+go.work
