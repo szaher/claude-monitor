@@ -437,6 +437,46 @@ func TestGetSessionsByProject(t *testing.T) {
 	}
 }
 
+func TestMigrations(t *testing.T) {
+	dir := t.TempDir()
+	database, err := InitDB(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+	defer database.Close()
+
+	tables := []string{
+		"session_metrics", "context_compactions", "session_attachments",
+		"session_commits", "budgets",
+	}
+	for _, table := range tables {
+		var name string
+		err := database.QueryRow(
+			"SELECT name FROM sqlite_master WHERE type='table' AND name=?", table,
+		).Scan(&name)
+		if err != nil {
+			t.Errorf("table %s not found: %v", table, err)
+		}
+	}
+
+	// Verify new columns on tool_calls
+	var count int
+	err = database.QueryRow(
+		"SELECT COUNT(*) FROM pragma_table_info('tool_calls') WHERE name IN ('stderr','stdout_preview')",
+	).Scan(&count)
+	if err != nil || count != 2 {
+		t.Errorf("tool_calls missing stderr/stdout_preview columns: count=%d err=%v", count, err)
+	}
+
+	// Verify new columns on sessions
+	err = database.QueryRow(
+		"SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name IN ('notes','tags')",
+	).Scan(&count)
+	if err != nil || count != 2 {
+		t.Errorf("sessions missing notes/tags columns: count=%d err=%v", count, err)
+	}
+}
+
 func TestSearchMessages(t *testing.T) {
 	db := setupTestDB(t)
 

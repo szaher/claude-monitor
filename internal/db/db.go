@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -35,6 +36,32 @@ func InitDB(dbPath string) (*sql.DB, error) {
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("execute schema: %w", err)
+	}
+
+	// Run migrations (idempotent — ALTER TABLE errors are ignored)
+	for _, stmt := range strings.Split(migrations, ";") {
+		// Strip leading comment lines from the statement
+		lines := strings.Split(stmt, "\n")
+		var cleaned []string
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" || strings.HasPrefix(trimmed, "--") {
+				continue
+			}
+			cleaned = append(cleaned, line)
+		}
+		stmt = strings.TrimSpace(strings.Join(cleaned, "\n"))
+		if stmt == "" {
+			continue
+		}
+		_, err := db.Exec(stmt)
+		if err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			// Only ignore duplicate-column errors (re-running ALTER TABLE)
+			if !strings.Contains(stmt, "ALTER TABLE") {
+				db.Close()
+				return nil, fmt.Errorf("migration: %w", err)
+			}
+		}
 	}
 
 	return db, nil
