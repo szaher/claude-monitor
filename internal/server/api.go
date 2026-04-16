@@ -128,6 +128,14 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 
 // handleSessionDetail handles GET /api/sessions/{id} — session detail with messages.
 func (s *Server) handleSessionDetail(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/sessions/")
+
+	// Check for sub-paths
+	if strings.Contains(path, "/timeline") {
+		s.handleSessionTimeline(w, r)
+		return
+	}
+
 	if r.Method == http.MethodPatch {
 		s.handleSessionPatch(w, r)
 		return
@@ -138,7 +146,7 @@ func (s *Server) handleSessionDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Extract session ID from URL path: /api/sessions/{id}
-	id := strings.TrimPrefix(r.URL.Path, "/api/sessions/")
+	id := path
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing session id")
 		return

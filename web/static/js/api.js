@@ -108,6 +108,11 @@ const API = {
         return API.post('/api/config', cfg);
     },
 
+    /** Get session timeline (events, duration, tokens). */
+    getSessionTimeline(sessionId) {
+        return API.get(`/api/sessions/${sessionId}/timeline`);
+    },
+
     /** Get session breakdown (tools, skills, MCP servers, agents). */
     getSessionBreakdown(sessionId) {
         return API.get('/api/stats/session-breakdown', { session_id: sessionId });
