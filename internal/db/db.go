@@ -56,11 +56,8 @@ func InitDB(dbPath string) (*sql.DB, error) {
 		}
 		_, err := db.Exec(stmt)
 		if err != nil && !strings.Contains(err.Error(), "duplicate column") {
-			// Only ignore duplicate-column errors (re-running ALTER TABLE)
-			if !strings.Contains(stmt, "ALTER TABLE") {
-				db.Close()
-				return nil, fmt.Errorf("migration: %w", err)
-			}
+			db.Close()
+			return nil, fmt.Errorf("migration %q: %w", stmt, err)
 		}
 	}
 
