@@ -138,7 +138,17 @@ func (p *Pipeline) ProcessLogEntry(data []byte) error {
 		}
 	}
 
-	// Only process user and assistant messages
+	// Process system entries
+	if entry.Type == "system" {
+		return p.processSystemEntry(entry)
+	}
+
+	// Process attachment entries
+	if entry.Type == "attachment" {
+		return p.processAttachmentEntry(entry)
+	}
+
+	// Skip non-message types (permission-mode, file-history-snapshot, last-prompt, queue-operation)
 	if entry.Type != "user" && entry.Type != "assistant" {
 		return nil
 	}
@@ -192,6 +202,78 @@ func (p *Pipeline) ProcessLogEntry(data []byte) error {
 	}
 
 	return nil
+}
+
+func (p *Pipeline) processSystemEntry(entry *parser.LogEntry) error {
+	metadata := map[string]interface{}{
+		"subtype":       entry.Subtype,
+		"duration_ms":   entry.DurationMs,
+		"message_count": entry.MessageCount,
+		"slug":          entry.Slug,
+		"is_meta":       entry.IsMeta,
+		"is_sidechain":  entry.IsSidechain,
+	}
+	contentJSON, _ := json.Marshal(metadata)
+
+	contentText := ""
+	if entry.Slug != "" {
+		contentText = entry.Slug
+	}
+	if entry.Subtype != "" {
+		contentText = entry.Subtype + ": " + contentText
+	}
+
+	msg := &models.Message{
+		ID:          entry.UUID,
+		SessionID:   entry.SessionID,
+		ParentID:    entry.ParentUUID,
+		Type:        "system",
+		ContentText: contentText,
+		ContentJSON: string(contentJSON),
+		Timestamp:   entry.Timestamp,
+	}
+
+	return db.InsertMessage(p.database, msg)
+}
+
+func (p *Pipeline) processAttachmentEntry(entry *parser.LogEntry) error {
+	if entry.Attachment == nil {
+		return nil
+	}
+
+	metadata := map[string]interface{}{
+		"attachment_type": entry.Attachment.Type,
+		"hook_name":       entry.Attachment.HookName,
+		"hook_event":      entry.Attachment.HookEvent,
+		"content":         entry.Attachment.Content,
+		"stdout":          entry.Attachment.Stdout,
+		"stderr":          entry.Attachment.Stderr,
+		"exit_code":       entry.Attachment.ExitCode,
+		"command":         entry.Attachment.Command,
+		"duration_ms":     entry.Attachment.DurationMs,
+		"tool_use_id":     entry.Attachment.ToolUseID,
+	}
+	contentJSON, _ := json.Marshal(metadata)
+
+	contentText := entry.Attachment.Type
+	if entry.Attachment.HookName != "" {
+		contentText += ": " + entry.Attachment.HookName
+	}
+	if entry.Attachment.Content != "" {
+		contentText += " — " + entry.Attachment.Content
+	}
+
+	msg := &models.Message{
+		ID:          entry.UUID,
+		SessionID:   entry.SessionID,
+		ParentID:    entry.ParentUUID,
+		Type:        "attachment",
+		ContentText: contentText,
+		ContentJSON: string(contentJSON),
+		Timestamp:   entry.Timestamp,
+	}
+
+	return db.InsertMessage(p.database, msg)
 }
 
 // StartBatchProcessor reads from eventCh, buffers events, and flushes

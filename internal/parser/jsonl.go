@@ -21,6 +21,31 @@ type LogEntry struct {
 	EntryPoint     string      `json:"entrypoint"`
 	PermissionMode string      `json:"permissionMode"`
 	Message        MessageData `json:"message"`
+
+	// System entry fields
+	Subtype      string `json:"subtype,omitempty"`
+	DurationMs   int    `json:"durationMs,omitempty"`
+	MessageCount int    `json:"messageCount,omitempty"`
+	Slug         string `json:"slug,omitempty"`
+	IsMeta       bool   `json:"isMeta,omitempty"`
+	IsSidechain  bool   `json:"isSidechain,omitempty"`
+
+	// Attachment entry fields
+	Attachment *AttachmentData `json:"attachment,omitempty"`
+}
+
+// AttachmentData holds data from attachment-type log entries (hooks, permissions, etc.)
+type AttachmentData struct {
+	Type       string `json:"type"`
+	HookName   string `json:"hookName,omitempty"`
+	HookEvent  string `json:"hookEvent,omitempty"`
+	Content    string `json:"content,omitempty"`
+	Stdout     string `json:"stdout,omitempty"`
+	Stderr     string `json:"stderr,omitempty"`
+	ExitCode   int    `json:"exitCode,omitempty"`
+	Command    string `json:"command,omitempty"`
+	DurationMs int    `json:"durationMs,omitempty"`
+	ToolUseID  string `json:"toolUseID,omitempty"`
 }
 
 // MessageData holds the message payload within a log entry.
