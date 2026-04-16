@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="auto">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude Monitor</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <!-- Sidebar -->
+    <nav id="sidebar" class="sidebar">
+        <div class="sidebar-header">
+            <span class="sidebar-logo">CM</span>
+            <span class="sidebar-title">Claude Monitor</span>
+        </div>
+        <ul class="sidebar-nav">
+            <li><a href="#dashboard" class="nav-link active" data-page="dashboard">
+                <span class="nav-icon">&#9641;</span> Dashboard
+            </a></li>
+            <li><a href="#sessions" class="nav-link" data-page="sessions">
+                <span class="nav-icon">&#9776;</span> Sessions
+            </a></li>
+            <li><a href="#live" class="nav-link" data-page="live">
+                <span class="nav-icon">&#9679;</span> Live
+            </a></li>
+            <li><a href="#tools" class="nav-link" data-page="tools">
+                <span class="nav-icon">&#9881;</span> Tools
+            </a></li>
+            <li><a href="#agents" class="nav-link" data-page="agents">
+                <span class="nav-icon">&#9673;</span> Agents
+            </a></li>
+            <li><a href="#projects" class="nav-link" data-page="projects">
+                <span class="nav-icon">&#9635;</span> Projects
+            </a></li>
+            <li><a href="#cost" class="nav-link" data-page="cost">
+                <span class="nav-icon">$</span> Cost
+            </a></li>
+            <li><a href="#settings" class="nav-link" data-page="settings">
+                <span class="nav-icon">&#9881;</span> Settings
+            </a></li>
+        </ul>
+    </nav>
+
+    <!-- Mobile hamburger toggle -->
+    <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle navigation">
+        <span></span><span></span><span></span>
+    </button>
+
+    <!-- Main wrapper -->
+    <div class="main-wrapper">
+        <!-- Top filter bar -->
+        <header class="top-bar">
+            <div class="top-bar-inner">
+                <div class="filter-group">
+                    <input type="search" id="filter-search" class="input" placeholder="Search sessions, tools..." aria-label="Search">
+                </div>
+                <div class="filter-group">
+                    <label for="filter-from" class="filter-label">From</label>
+                    <input type="date" id="filter-from" class="input input-date" aria-label="Date from">
+                </div>
+                <div class="filter-group">
+                    <label for="filter-to" class="filter-label">To</label>
+                    <input type="date" id="filter-to" class="input input-date" aria-label="Date to">
+                </div>
+                <div class="filter-group">
+                    <select id="filter-project" class="input" aria-label="Project filter">
+                        <option value="">All Projects</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <select id="filter-model" class="input" aria-label="Model filter">
+                        <option value="">All Models</option>
+                    </select>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main content area -->
+        <main id="main-content" class="main-content">
+            <div class="loading-spinner"></div>
+        </main>
+    </div>
+
+    <!-- Toast container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Scripts -->
+    <script src="/js/api.js"></script>
+    <script src="/js/components/dashboard.js"></script>
+    <script src="/js/components/sessions.js"></script>
+    <script src="/js/components/live.js"></script>
+    <script src="/js/components/tools.js"></script>
+    <script src="/js/components/agents.js"></script>
+    <script src="/js/components/projects.js"></script>
+    <script src="/js/components/cost.js"></script>
+    <script src="/js/components/settings.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>
