@@ -103,6 +103,11 @@ const API = {
         return API.get('/api/stats/prompt-patterns', params);
     },
 
+    /** Get file activity heatmap for a project. */
+    getFileHeatmap(project) {
+        return API.get('/api/stats/file-heatmap', { project });
+    },
+
     /** Get current config. */
     getConfig() {
         return API.get('/api/config');
