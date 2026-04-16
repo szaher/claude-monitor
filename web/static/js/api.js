@@ -93,6 +93,11 @@ const API = {
         return API.get('/api/stats/errors', params);
     },
 
+    /** Get token efficiency stats. */
+    getTokenEfficiency(params) {
+        return API.get('/api/stats/token-efficiency', params);
+    },
+
     /** Get current config. */
     getConfig() {
         return API.get('/api/config');

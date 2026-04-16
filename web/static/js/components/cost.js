@@ -86,10 +86,11 @@ const CostPage = {
         this.destroyCharts();
 
         try {
-            const [dailyData, modelData, projectData] = await Promise.all([
+            const [dailyData, modelData, projectData, efficiencyData] = await Promise.all([
                 API.getDailyStats(90),
                 API.getModelStats(),
                 API.getProjectStats(),
+                API.getTokenEfficiency().catch(() => null),
             ]);
 
             const days = (dailyData && dailyData.days) || [];
@@ -102,6 +103,7 @@ const CostPage = {
             this.renderProjectChart(projects);
             this.renderCacheAnalysis(days);
             this.renderCostProjection(days);
+            this.renderTokenEfficiency(efficiencyData);
         } catch (err) {
             console.error('Cost page load error:', err);
             App.toast('Failed to load cost data: ' + err.message, 'error');
@@ -445,6 +447,50 @@ const CostPage = {
             </div>
             <div class="text-muted text-sm mt-1">Projection based on 7-day rolling average of ${formatCost(last7Avg)}/day.</div>
         `;
+    },
+
+    /* ---- Token Efficiency ---- */
+    renderTokenEfficiency(data) {
+        if (!data) return;
+        const container = document.querySelector('.cost-page');
+        if (!container) return;
+
+        const section = document.createElement('div');
+        section.className = 'token-efficiency-section mt-2';
+        section.innerHTML = `
+            <h2 class="mt-2">Token Efficiency</h2>
+            <div class="card-grid mt-2" style="grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));">
+                <div class="card stat-card" style="margin-bottom:0;">
+                    <div class="stat-value" style="color:var(--accent-success);">${((data.cache_hit_rate || 0) * 100).toFixed(1)}%</div>
+                    <div class="stat-label">Cache Hit Rate</div>
+                </div>
+                <div class="card stat-card" style="margin-bottom:0;">
+                    <div class="stat-value" style="color:var(--accent-success);">$${(data.cache_savings_usd || 0).toFixed(2)}</div>
+                    <div class="stat-label">Cache Savings</div>
+                </div>
+                <div class="card stat-card" style="margin-bottom:0;">
+                    <div class="stat-value">${Math.round(data.avg_tokens_per_tool_call || 0).toLocaleString()}</div>
+                    <div class="stat-label">Avg Tokens/Tool Call</div>
+                </div>
+                <div class="card stat-card" style="margin-bottom:0;">
+                    <div class="stat-value">${Math.round(data.avg_output_tokens_per_message || 0).toLocaleString()}</div>
+                    <div class="stat-label">Avg Output/Message</div>
+                </div>
+            </div>
+            ${data.efficiency_by_model && data.efficiency_by_model.length > 0 ? `
+            <div class="card mt-2">
+                <div class="card-header"><h3>Efficiency by Model</h3></div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead><tr><th>Model</th><th class="text-right">Cache Hit Rate</th><th class="text-right">Output Ratio</th></tr></thead>
+                        <tbody>${data.efficiency_by_model.map(m =>
+                            `<tr><td>${this._esc(m.model)}</td><td class="text-right">${(m.cache_hit_rate * 100).toFixed(1)}%</td><td class="text-right">${(m.avg_output_ratio * 100).toFixed(1)}%</td></tr>`
+                        ).join('')}</tbody>
+                    </table>
+                </div>
+            </div>` : ''}
+        `;
+        container.appendChild(section);
     },
 
     /* ---- Helpers ---- */
