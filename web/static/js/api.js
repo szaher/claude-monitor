@@ -88,6 +88,11 @@ const API = {
         return API.get('/api/stats/mcp');
     },
 
+    /** Get error analysis stats. */
+    getErrorStats(params) {
+        return API.get('/api/stats/errors', params);
+    },
+
     /** Get current config. */
     getConfig() {
         return API.get('/api/config');

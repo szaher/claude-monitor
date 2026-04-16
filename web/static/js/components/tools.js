@@ -70,11 +70,12 @@ const ToolsPage = {
         this.destroyCharts();
 
         try {
-            const [toolStats, toolCalls, skillStats, mcpStats] = await Promise.all([
+            const [toolStats, toolCalls, skillStats, mcpStats, errorData] = await Promise.all([
                 API.getToolStats(),
                 API.get('/api/tool-calls', { limit: 500 }),
                 API.getSkillStats().catch(() => ({ skills: [] })),
                 API.getMCPStats().catch(() => ({ servers: [] })),
+                API.getErrorStats().catch(() => null),
             ]);
 
             const tools = (toolStats && toolStats.tools) || [];
@@ -89,6 +90,7 @@ const ToolsPage = {
             this.renderFilesTable(calls);
             this.renderSkillsTable(skills);
             this.renderMCPTable(servers);
+            this.renderErrorAnalysis(errorData);
         } catch (err) {
             console.error('Tools page load error:', err);
             App.toast('Failed to load tool data: ' + err.message, 'error');
@@ -473,6 +475,215 @@ const ToolsPage = {
                 </table>
             </div>
         `;
+    },
+
+    /* ---- Error Analysis Section ---- */
+    renderErrorAnalysis(data) {
+        if (!data) return;
+
+        const container = document.querySelector('.tools-page');
+        if (!container) return;
+
+        const totalErrors = data.total_errors || 0;
+        const errorRate = data.error_rate || 0;
+        const errorsByTool = data.errors_by_tool || [];
+        const commonErrors = data.common_errors || [];
+        const errorTrend = data.error_trend || [];
+
+        // Section header
+        const section = document.createElement('div');
+        section.className = 'error-analysis-section mt-2';
+        section.innerHTML = '<h2 class="mt-2">Error Analysis</h2>';
+
+        // Stat cards
+        const statsGrid = document.createElement('div');
+        statsGrid.className = 'card-grid mt-2';
+        statsGrid.style.gridTemplateColumns = '1fr 1fr';
+        statsGrid.innerHTML = `
+            <div class="card" style="margin-bottom:0;">
+                <div class="card-header"><h3>Total Errors</h3></div>
+                <div style="padding:1rem;text-align:center;">
+                    <span style="font-size:2.5rem;font-weight:700;color:#d94452;">${totalErrors}</span>
+                </div>
+            </div>
+            <div class="card" style="margin-bottom:0;">
+                <div class="card-header"><h3>Error Rate</h3></div>
+                <div style="padding:1rem;text-align:center;">
+                    <span style="font-size:2.5rem;font-weight:700;color:#e5a921;">${(errorRate * 100).toFixed(1)}%</span>
+                </div>
+            </div>
+        `;
+        section.appendChild(statsGrid);
+
+        // Charts row
+        const chartsGrid = document.createElement('div');
+        chartsGrid.className = 'card-grid mt-2';
+        chartsGrid.style.gridTemplateColumns = '1fr 1fr';
+        chartsGrid.innerHTML = `
+            <div class="card" style="margin-bottom:0;">
+                <div class="card-header"><h3>Failure Rate by Tool</h3></div>
+                <div class="chart-container" style="max-height:320px;">
+                    <canvas id="error-by-tool-chart"></canvas>
+                </div>
+            </div>
+            <div class="card" style="margin-bottom:0;">
+                <div class="card-header"><h3>Error Trend (30 Days)</h3></div>
+                <div class="chart-container" style="max-height:320px;">
+                    <canvas id="error-trend-chart"></canvas>
+                </div>
+            </div>
+        `;
+        section.appendChild(chartsGrid);
+
+        // Common error patterns table
+        const patternsCard = document.createElement('div');
+        patternsCard.className = 'card mt-2';
+        if (commonErrors.length === 0) {
+            patternsCard.innerHTML = `
+                <div class="card-header"><h3>Common Error Patterns</h3></div>
+                <div class="empty-state"><p>No error patterns found</p></div>
+            `;
+        } else {
+            patternsCard.innerHTML = `
+                <div class="card-header"><h3>Common Error Patterns</h3></div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr><th>Error Pattern</th><th class="text-right">Count</th></tr>
+                        </thead>
+                        <tbody>
+                            ${commonErrors.map(e => `
+                                <tr>
+                                    <td class="truncate font-mono text-sm" style="max-width:500px;" title="${this._esc(e.pattern)}">${this._esc(e.pattern)}</td>
+                                    <td class="text-right">${e.count}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+        section.appendChild(patternsCard);
+
+        container.appendChild(section);
+
+        // Render charts
+        this.renderErrorByToolChart(errorsByTool);
+        this.renderErrorTrendChart(errorTrend);
+    },
+
+    renderErrorByToolChart(errorsByTool) {
+        const canvas = document.getElementById('error-by-tool-chart');
+        if (!canvas) return;
+
+        if (!errorsByTool || errorsByTool.length === 0) {
+            canvas.parentElement.innerHTML = '<div class="empty-state"><p>No error data by tool</p></div>';
+            return;
+        }
+
+        const sorted = errorsByTool.slice(0, 12);
+        const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#888';
+        const gridColor = getComputedStyle(document.documentElement).getPropertyValue('--border-color').trim() || '#e0e0e8';
+
+        this.charts.errorByTool = new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels: sorted.map(t => t.tool),
+                datasets: [{
+                    label: 'Failure Rate',
+                    data: sorted.map(t => (t.rate * 100).toFixed(1)),
+                    backgroundColor: sorted.map(t => t.rate > 0.5 ? '#d94452' : t.rate > 0.2 ? '#e5a921' : '#2ea87a'),
+                    borderRadius: 4,
+                    barThickness: 20,
+                }],
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) {
+                                const item = sorted[ctx.dataIndex];
+                                return ctx.parsed.x + '% (' + item.errors + '/' + item.total + ')';
+                            },
+                        },
+                    },
+                },
+                scales: {
+                    x: {
+                        ticks: { color: textColor, callback: v => v + '%' },
+                        grid: { color: gridColor, drawBorder: false },
+                        title: { display: true, text: 'Failure Rate (%)', color: textColor },
+                        max: 100,
+                    },
+                    y: {
+                        ticks: { color: textColor },
+                        grid: { display: false },
+                    },
+                },
+            },
+        });
+    },
+
+    renderErrorTrendChart(errorTrend) {
+        const canvas = document.getElementById('error-trend-chart');
+        if (!canvas) return;
+
+        if (!errorTrend || errorTrend.length === 0) {
+            canvas.parentElement.innerHTML = '<div class="empty-state"><p>No error trend data</p></div>';
+            return;
+        }
+
+        const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#888';
+        const gridColor = getComputedStyle(document.documentElement).getPropertyValue('--border-color').trim() || '#e0e0e8';
+
+        this.charts.errorTrend = new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels: errorTrend.map(d => d.date),
+                datasets: [
+                    {
+                        label: 'Errors',
+                        data: errorTrend.map(d => d.errors),
+                        borderColor: '#d94452',
+                        backgroundColor: 'rgba(217, 68, 82, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 3,
+                    },
+                    {
+                        label: 'Total Calls',
+                        data: errorTrend.map(d => d.total),
+                        borderColor: '#5b6abf',
+                        backgroundColor: 'rgba(91, 106, 191, 0.1)',
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: 3,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { color: textColor, usePointStyle: true, padding: 12 } },
+                },
+                scales: {
+                    x: {
+                        ticks: { color: textColor, maxTicksLimit: 10 },
+                        grid: { display: false },
+                    },
+                    y: {
+                        ticks: { color: textColor },
+                        grid: { color: gridColor, drawBorder: false },
+                        title: { display: true, text: 'Count', color: textColor },
+                    },
+                },
+            },
+        });
     },
 
     /* ---- Helpers ---- */

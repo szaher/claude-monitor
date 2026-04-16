@@ -44,6 +44,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/api/stats/projects", s.handleProjectStats)
 	s.mux.HandleFunc("/api/stats/skills", s.handleSkillStats)
 	s.mux.HandleFunc("/api/stats/mcp", s.handleMCPStats)
+	s.mux.HandleFunc("/api/stats/errors", s.handleErrors)
 	s.mux.HandleFunc("/api/stats/session-breakdown", s.handleSessionBreakdown)
 	s.mux.HandleFunc("/api/stats/project-breakdown", s.handleProjectBreakdown)
 	s.mux.HandleFunc("/api/tags", s.handleTags)
