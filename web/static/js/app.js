@@ -70,6 +70,13 @@ const App = {
         const overlay = document.querySelector('.sidebar-overlay');
         if (overlay) overlay.classList.remove('active');
 
+        // Destroy previous page if it has a cleanup method
+        const prevComponent = this.pages[this._prevPage];
+        if (prevComponent && typeof prevComponent.destroy === 'function') {
+            try { prevComponent.destroy(); } catch (_) { /* noop */ }
+        }
+        this._prevPage = page;
+
         // Render page component
         const container = document.getElementById('main-content');
         container.innerHTML = '';
@@ -126,9 +133,16 @@ const App = {
     },
 
     onFiltersChanged() {
+        // Reset paginated pages to first page and list view
+        const component = this.pages[this.currentPage];
+        if (component) {
+            if (typeof component.page === 'number') component.page = 0;
+            if (typeof component.currentView === 'string') component.currentView = 'list';
+            if (component.selectedSession !== undefined) component.selectedSession = null;
+        }
+
         // Re-render current page with updated filters
         const container = document.getElementById('main-content');
-        const component = this.pages[this.currentPage];
         if (component && typeof component.render === 'function') {
             container.innerHTML = '';
             try {

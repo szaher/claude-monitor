@@ -923,3 +923,141 @@ pre code {
 .sidebar-overlay.active {
     display: block;
 }
+
+/* ---------- Sessions Page — Conversation Thread ---------- */
+.conversation-thread {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.msg {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    background: var(--bg-card);
+}
+
+.msg-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+.msg-body {
+    line-height: 1.7;
+}
+
+.msg-text {
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin-bottom: 8px;
+}
+
+.msg-user {
+    border-left: 3px solid var(--accent-info);
+}
+
+.msg-assistant {
+    border-left: 3px solid var(--accent-success);
+}
+
+.msg-system {
+    border-left: 3px solid var(--text-muted);
+    opacity: 0.8;
+}
+
+.msg-thinking {
+    border-color: var(--border-color);
+}
+
+.msg-thinking .collapsible-header {
+    background: transparent;
+    padding: 8px 12px;
+}
+
+.msg-tool-use .collapsible-header {
+    padding: 8px 12px;
+}
+
+.msg-tool-use pre {
+    max-height: 400px;
+    overflow: auto;
+}
+
+/* ---------- Live Page ---------- */
+.live-events {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: calc(100vh - 180px);
+    overflow-y: auto;
+}
+
+.live-event {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    background: var(--bg-card);
+    font-size: 0.875rem;
+    animation: live-event-in 0.2s ease;
+}
+
+@keyframes live-event-in {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.live-event-inner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.live-event-time {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.live-event-badge {
+    flex-shrink: 0;
+    min-width: 50px;
+    text-align: center;
+}
+
+.live-event-detail {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.live-event-session {
+    flex-shrink: 0;
+}
+
+.event-session {
+    border-left: 3px solid var(--accent-info);
+}
+
+.event-tool {
+    border-left: 3px solid var(--accent-success);
+}
+
+.event-agent {
+    border-left: 3px solid #9b59b6;
+}
+
+.event-error {
+    border-left: 3px solid var(--accent-danger);
+}
+
+.event-default {
+    border-left: 3px solid var(--text-muted);
+}
