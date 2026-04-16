@@ -302,6 +302,35 @@ const SessionsPage = {
                 </div>
             `;
 
+            // Notes & Tags card
+            const sessionNotes = this._esc(session.notes || '');
+            const sessionTags = session.tags || '';
+            const tagsList = sessionTags ? sessionTags.split(',').map(t => t.trim()).filter(Boolean) : [];
+            const tagBadges = tagsList.map(t =>
+                `<span class="badge badge-info session-tag-badge" style="cursor:pointer;" data-tag="${this._esc(t)}">${this._esc(t)} &times;</span>`
+            ).join('');
+
+            headerHTML += `
+                <div class="card" style="margin-bottom:1.5rem">
+                    <div class="card-header"><h3>Notes & Tags</h3></div>
+                    <div class="card-body">
+                        <div style="margin-bottom:1rem">
+                            <label style="font-weight:600;display:block;margin-bottom:0.25rem">Notes</label>
+                            <textarea id="session-notes" rows="3" style="width:100%;padding:0.5rem;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)"
+                                placeholder="Add notes about this session...">${sessionNotes}</textarea>
+                        </div>
+                        <div>
+                            <label style="font-weight:600;display:block;margin-bottom:0.25rem">Tags</label>
+                            <div id="session-tags-container" style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center">
+                                ${tagBadges}
+                                <input id="session-tag-input" type="text" placeholder="Add tag..."
+                                    style="border:1px solid var(--border);border-radius:4px;padding:0.25rem 0.5rem;background:var(--bg-secondary);color:var(--text);width:120px">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
             // Conversation thread
             let threadHTML = '<div class="conversation-thread">';
 
@@ -316,6 +345,49 @@ const SessionsPage = {
             threadHTML += '</div>';
 
             area.innerHTML = headerHTML + threadHTML;
+
+            // Bind Notes auto-save on blur
+            const notesEl = document.getElementById('session-notes');
+            if (notesEl) {
+                notesEl.addEventListener('blur', () => {
+                    API.updateSession(this.selectedSession, { notes: notesEl.value });
+                });
+            }
+
+            // Bind tag input (Enter to add)
+            const tagInput = document.getElementById('session-tag-input');
+            if (tagInput) {
+                tagInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const newTag = tagInput.value.trim();
+                        if (!newTag) return;
+                        const currentTags = this._getCurrentTags();
+                        if (!currentTags.includes(newTag)) {
+                            currentTags.push(newTag);
+                            API.updateSession(this.selectedSession, { tags: currentTags.join(',') }).then(() => {
+                                const container = document.getElementById('main-content');
+                                container.innerHTML = '';
+                                this.render(container);
+                            });
+                        }
+                        tagInput.value = '';
+                    }
+                });
+            }
+
+            // Bind tag removal on badge click
+            area.querySelectorAll('.session-tag-badge').forEach(badge => {
+                badge.addEventListener('click', () => {
+                    const tagToRemove = badge.dataset.tag;
+                    const currentTags = this._getCurrentTags().filter(t => t !== tagToRemove);
+                    API.updateSession(this.selectedSession, { tags: currentTags.join(',') }).then(() => {
+                        const container = document.getElementById('main-content');
+                        container.innerHTML = '';
+                        this.render(container);
+                    });
+                });
+            });
 
             // Bind collapsible toggles
             this.bindCollapsibles(area);
@@ -494,6 +566,12 @@ const SessionsPage = {
     /* ------------------------------------------------------------------
        Helpers
     ------------------------------------------------------------------ */
+
+    /** Get current tags from the DOM badges. */
+    _getCurrentTags() {
+        const badges = document.querySelectorAll('.session-tag-badge');
+        return Array.from(badges).map(b => b.dataset.tag).filter(Boolean);
+    },
 
     /** Minimal HTML escaping to avoid XSS in dynamic content. */
     _esc(str) {

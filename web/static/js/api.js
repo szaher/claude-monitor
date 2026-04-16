@@ -112,4 +112,18 @@ const API = {
     search(q, limit) {
         return API.get('/api/search', { q, limit });
     },
+
+    /** Update session notes/tags via PATCH. */
+    updateSession(id, data) {
+        return fetch(`/api/sessions/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        }).then(r => r.json());
+    },
+
+    /** Get all tags with counts. */
+    getTags() {
+        return API.get('/api/tags');
+    },
 };

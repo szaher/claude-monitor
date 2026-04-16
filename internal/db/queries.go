@@ -122,12 +122,14 @@ func GetSessionByID(db *sql.DB, id string) (*models.Session, error) {
 	var startedAt string
 	var endedAt sql.NullString
 	var cwd, gitBranch, claudeVersion, entryPoint, permissionMode sql.NullString
+	var notes, tags sql.NullString
 
 	err := db.QueryRow(`
 		SELECT id, project_path, project_name, cwd, git_branch,
 			started_at, ended_at, claude_version, entry_point, permission_mode,
 			total_input_tokens, total_output_tokens, total_cache_read_tokens,
-			total_cache_write_tokens, estimated_cost_usd
+			total_cache_write_tokens, estimated_cost_usd,
+			COALESCE(notes,'') as notes, COALESCE(tags,'') as tags
 		FROM sessions WHERE id = ?
 	`, id).Scan(
 		&s.ID, &s.ProjectPath, &s.ProjectName,
@@ -137,6 +139,7 @@ func GetSessionByID(db *sql.DB, id string) (*models.Session, error) {
 		&s.TotalInputTokens, &s.TotalOutputTokens,
 		&s.TotalCacheReadTokens, &s.TotalCacheWriteTokens,
 		&s.EstimatedCostUSD,
+		&notes, &tags,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("get session %s: %w", id, err)
@@ -147,6 +150,8 @@ func GetSessionByID(db *sql.DB, id string) (*models.Session, error) {
 	s.ClaudeVersion = claudeVersion.String
 	s.EntryPoint = entryPoint.String
 	s.PermissionMode = permissionMode.String
+	s.Notes = notes.String
+	s.Tags = tags.String
 
 	t, err := time.Parse(time.RFC3339, startedAt)
 	if err != nil {
