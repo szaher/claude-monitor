@@ -51,6 +51,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/api/tags", s.handleTags)
 	s.mux.HandleFunc("/api/config", s.handleConfig)
 	s.mux.HandleFunc("/api/search", s.handleSearch)
+	s.mux.HandleFunc("/api/export", s.handleExport)
 	s.mux.HandleFunc("/ws", s.hub.HandleWebSocket)
 
 	// Static files (embedded)

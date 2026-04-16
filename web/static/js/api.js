@@ -136,4 +136,13 @@ const API = {
     getTags() {
         return API.get('/api/tags');
     },
+
+    /** Build an export download URL with the given params. */
+    getExportURL(params) {
+        const url = new URL('/api/export', window.location.origin);
+        Object.entries(params).forEach(([k, v]) => {
+            if (v) url.searchParams.set(k, v);
+        });
+        return url.toString();
+    },
 };
