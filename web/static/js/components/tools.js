@@ -50,6 +50,18 @@ const ToolsPage = {
                         <div id="files-table"></div>
                     </div>
                 </div>
+
+                <!-- Skills & MCP Row -->
+                <div class="card-grid mt-2" style="grid-template-columns: 1fr 1fr;">
+                    <div class="card" style="margin-bottom:0;">
+                        <div class="card-header"><h3>Skills Used</h3></div>
+                        <div id="skills-table"></div>
+                    </div>
+                    <div class="card" style="margin-bottom:0;">
+                        <div class="card-header"><h3>MCP Servers</h3></div>
+                        <div id="mcp-table"></div>
+                    </div>
+                </div>
             </div>
         `;
     },
@@ -58,19 +70,25 @@ const ToolsPage = {
         this.destroyCharts();
 
         try {
-            const [toolStats, toolCalls] = await Promise.all([
+            const [toolStats, toolCalls, skillStats, mcpStats] = await Promise.all([
                 API.getToolStats(),
                 API.get('/api/tool-calls', { limit: 500 }),
+                API.getSkillStats().catch(() => ({ skills: [] })),
+                API.getMCPStats().catch(() => ({ servers: [] })),
             ]);
 
             const tools = (toolStats && toolStats.tools) || [];
             const calls = (toolCalls && toolCalls.tool_calls) || [];
+            const skills = (skillStats && skillStats.skills) || [];
+            const servers = (mcpStats && mcpStats.servers) || [];
 
             this.renderUsageDonut(tools);
             this.renderSuccessBar(tools);
             this.renderDurationBar(calls);
             this.renderBashCommands(calls);
             this.renderFilesTable(calls);
+            this.renderSkillsTable(skills);
+            this.renderMCPTable(servers);
         } catch (err) {
             console.error('Tools page load error:', err);
             App.toast('Failed to load tool data: ' + err.message, 'error');
@@ -367,6 +385,88 @@ const ToolsPage = {
                             <tr>
                                 <td class="truncate font-mono text-sm" style="max-width:350px;" title="${this._esc(s.path)}">${this._esc(s.path)}</td>
                                 <td class="text-right">${s.count}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    },
+
+    /* ---- Skills Table ---- */
+    renderSkillsTable(skills) {
+        const el = document.getElementById('skills-table');
+        if (!el) return;
+
+        const sorted = (skills || [])
+            .slice()
+            .sort((a, b) => (b.count || 0) - (a.count || 0));
+
+        if (sorted.length === 0) {
+            el.innerHTML = '<div class="empty-state"><p>No skills data found</p></div>';
+            return;
+        }
+
+        el.innerHTML = `
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr><th>Skill Name</th><th class="text-right">Count</th></tr>
+                    </thead>
+                    <tbody>
+                        ${sorted.map(s => `
+                            <tr>
+                                <td><span class="badge badge-info">${this._esc(s.name)}</span></td>
+                                <td class="text-right">${s.count || 0}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    },
+
+    /* ---- MCP Servers Table ---- */
+    renderMCPTable(servers) {
+        const el = document.getElementById('mcp-table');
+        if (!el) return;
+
+        const sorted = (servers || [])
+            .slice()
+            .sort((a, b) => (b.count || 0) - (a.count || 0));
+
+        if (sorted.length === 0) {
+            el.innerHTML = '<div class="empty-state"><p>No MCP server data found</p></div>';
+            return;
+        }
+
+        // Flatten server+tool combinations into rows
+        const rows = [];
+        sorted.forEach(server => {
+            const tools = (server.tools || [])
+                .slice()
+                .sort((a, b) => (b.count || 0) - (a.count || 0));
+            if (tools.length === 0) {
+                rows.push({ server: server.name, tool: '-', count: server.count || 0 });
+            } else {
+                tools.forEach(tool => {
+                    rows.push({ server: server.name, tool: tool.name, count: tool.count || 0 });
+                });
+            }
+        });
+
+        el.innerHTML = `
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr><th>Server</th><th>Tool</th><th class="text-right">Count</th></tr>
+                    </thead>
+                    <tbody>
+                        ${rows.map(r => `
+                            <tr>
+                                <td><span class="badge badge-success">${this._esc(r.server)}</span></td>
+                                <td>${this._esc(r.tool)}</td>
+                                <td class="text-right">${r.count}</td>
                             </tr>
                         `).join('')}
                     </tbody>

@@ -199,13 +199,15 @@ const ProjectsPage = {
         if (!area) return;
 
         try {
-            const [sessionsData, toolStats] = await Promise.all([
+            const [sessionsData, toolStats, breakdownData] = await Promise.all([
                 API.getSessions({ project: this.selectedProject, limit: 200 }),
                 API.getToolStats(),
+                API.getProjectBreakdown(this.selectedProject).catch(() => null),
             ]);
 
             const sessions = (sessionsData && sessionsData.sessions) || [];
             const tools = (toolStats && toolStats.tools) || [];
+            const breakdown = (breakdownData) || {};
 
             if (sessions.length === 0) {
                 area.innerHTML = '<div class="empty-state"><p>No sessions found for this project</p></div>';
@@ -227,6 +229,9 @@ const ProjectsPage = {
                     <div class="card stat-card"><div class="stat-value">${formatTokens(totalTokens)}</div><div class="stat-label">Total Tokens</div></div>
                     <div class="card stat-card"><div class="stat-value">${formatCost(totalCost)}</div><div class="stat-label">Total Cost</div></div>
                 </div>
+
+                <!-- Breakdown: Tools, Skills, MCP Servers, Agents -->
+                <div id="project-breakdown-section"></div>
 
                 <!-- Charts -->
                 <div class="card-grid mt-2" style="grid-template-columns: 1fr 1fr;">
@@ -251,6 +256,7 @@ const ProjectsPage = {
                 </div>
             `;
 
+            this.renderBreakdownSection(breakdown);
             this.renderDetailSessionsChart(sessions);
             this.renderDetailTokensChart(sessions);
             this.renderDetailSessionsTable(sessions);
@@ -259,6 +265,104 @@ const ProjectsPage = {
             console.error('Project detail error:', err);
             area.innerHTML = `<div class="empty-state"><h3>Error</h3><p>${this._esc(err.message)}</p></div>`;
         }
+    },
+
+    renderBreakdownSection(breakdown) {
+        const el = document.getElementById('project-breakdown-section');
+        if (!el) return;
+
+        if (!breakdown || (
+            !breakdown.tools?.length &&
+            !breakdown.skills?.length &&
+            !breakdown.mcp_servers?.length &&
+            !breakdown.agents?.length
+        )) {
+            el.innerHTML = '';
+            return;
+        }
+
+        const bdTools = breakdown.tools || [];
+        const bdSkills = breakdown.skills || [];
+        const bdServers = breakdown.mcp_servers || [];
+        const bdAgents = breakdown.agents || [];
+
+        // --- Tools Used: top 10 mini horizontal bar chart ---
+        let toolsHtml = '';
+        if (bdTools.length === 0) {
+            toolsHtml = '<div class="text-muted text-sm">No tools used</div>';
+        } else {
+            const top10 = bdTools.slice(0, 10);
+            const maxCount = Math.max(...top10.map(t => t.count || 0));
+            toolsHtml = `<div style="padding: 8px 0;">
+                ${top10.map(t => {
+                    const width = maxCount > 0 ? Math.max(2, ((t.count || 0) / maxCount) * 100) : 2;
+                    return `
+                        <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">
+                            <div class="truncate text-sm" style="width:160px;flex-shrink:0;" title="${this._esc(t.name)}">${this._esc(t.name)}</div>
+                            <div style="flex:1;background:var(--bg-tertiary);border-radius:4px;height:20px;overflow:hidden;">
+                                <div style="width:${width}%;background:var(--accent-primary);height:100%;border-radius:4px;transition:width 0.3s;"></div>
+                            </div>
+                            <div class="text-sm text-muted" style="width:60px;text-align:right;">${t.count || 0}</div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>`;
+        }
+
+        // --- Skills Used: badges ---
+        let skillsHtml = '';
+        if (bdSkills.length === 0) {
+            skillsHtml = '<div class="text-muted text-sm">No skills used</div>';
+        } else {
+            skillsHtml = `<div style="display:flex;flex-wrap:wrap;gap:8px;">
+                ${bdSkills.map(s => `<span class="badge badge-info">${this._esc(s.name)} (${s.count || 0})</span>`).join('')}
+            </div>`;
+        }
+
+        // --- MCP Servers: badges with tooltips ---
+        let serversHtml = '';
+        if (bdServers.length === 0) {
+            serversHtml = '<div class="text-muted text-sm">No MCP servers used</div>';
+        } else {
+            serversHtml = `<div style="display:flex;flex-wrap:wrap;gap:8px;">
+                ${bdServers.map(s => {
+                    const serverTools = (s.tools || []).map(t => `${this._esc(t.name)} (${t.count || 0})`).join(', ');
+                    const tooltip = serverTools ? serverTools : 'No tools';
+                    return `<span class="badge badge-success" title="${this._esc(tooltip)}">${this._esc(s.name)} (${s.count || 0})</span>`;
+                }).join('')}
+            </div>`;
+        }
+
+        // --- Agents: badges ---
+        let agentsHtml = '';
+        if (bdAgents.length === 0) {
+            agentsHtml = '<div class="text-muted text-sm">No agents spawned</div>';
+        } else {
+            agentsHtml = `<div style="display:flex;flex-wrap:wrap;gap:8px;">
+                ${bdAgents.map(a => `<span class="badge badge-info">${this._esc(a.agent_type)} (${a.count || 0})</span>`).join('')}
+            </div>`;
+        }
+
+        el.innerHTML = `
+            <div class="card-grid mt-2" style="grid-template-columns: 1fr 1fr;">
+                <div class="card" style="margin-bottom:0;">
+                    <div class="card-header"><h3>Tools Used</h3></div>
+                    <div style="padding:0 12px 12px;">${toolsHtml}</div>
+                </div>
+                <div class="card" style="margin-bottom:0;">
+                    <div class="card-header"><h3>Skills Used</h3></div>
+                    <div style="padding:12px;">${skillsHtml}</div>
+                </div>
+                <div class="card" style="margin-bottom:0;">
+                    <div class="card-header"><h3>MCP Servers</h3></div>
+                    <div style="padding:12px;">${serversHtml}</div>
+                </div>
+                <div class="card" style="margin-bottom:0;">
+                    <div class="card-header"><h3>Agents</h3></div>
+                    <div style="padding:12px;">${agentsHtml}</div>
+                </div>
+            </div>
+        `;
     },
 
     renderDetailSessionsChart(sessions) {
@@ -403,7 +507,7 @@ const ProjectsPage = {
                     </thead>
                     <tbody>
                         ${display.map(s => `
-                            <tr>
+                            <tr class="cursor-pointer session-row" data-session-id="${this._esc(s.id)}">
                                 <td style="white-space:nowrap;">${formatDate(s.started_at)}</td>
                                 <td>${formatDuration(s.started_at, s.ended_at)}</td>
                                 <td class="truncate" style="max-width:120px;" title="${this._esc(s.git_branch || '')}">${this._esc(s.git_branch || '-')}</td>
@@ -417,6 +521,17 @@ const ProjectsPage = {
             </div>
             ${sessions.length > 50 ? `<div class="text-muted text-sm mt-1">Showing 50 of ${sessions.length} sessions</div>` : ''}
         `;
+
+        el.querySelectorAll('.session-row').forEach(row => {
+            row.addEventListener('click', () => {
+                const sid = row.dataset.sessionId;
+                if (typeof SessionsPage !== 'undefined') {
+                    SessionsPage.selectedSession = sid;
+                    SessionsPage.currentView = 'detail';
+                }
+                window.location.hash = 'sessions';
+            });
+        });
     },
 
     /* ---- Helpers ---- */

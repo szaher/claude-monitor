@@ -521,6 +521,497 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleSkillStats handles GET /api/stats/skills — global skills usage stats.
+func (s *Server) handleSkillStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	rows, err := s.db.Query(`SELECT tool_input FROM tool_calls WHERE tool_name = 'Skill'`)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "query skill stats: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	counts := map[string]int{}
+	for rows.Next() {
+		var toolInput sql.NullString
+		if err := rows.Scan(&toolInput); err != nil {
+			writeError(w, http.StatusInternalServerError, "scan skill stat: "+err.Error())
+			return
+		}
+		if !toolInput.Valid || toolInput.String == "" {
+			continue
+		}
+		var parsed struct {
+			Skill string `json:"skill"`
+		}
+		if err := json.Unmarshal([]byte(toolInput.String), &parsed); err != nil || parsed.Skill == "" {
+			continue
+		}
+		counts[parsed.Skill]++
+	}
+	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, "rows: "+err.Error())
+		return
+	}
+
+	result := []map[string]interface{}{}
+	for name, count := range counts {
+		result = append(result, map[string]interface{}{
+			"name":  name,
+			"count": count,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"skills": result,
+	})
+}
+
+// handleMCPStats handles GET /api/stats/mcp — global MCP server usage stats.
+func (s *Server) handleMCPStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	rows, err := s.db.Query(`
+		SELECT tool_name, COUNT(*) as count
+		FROM tool_calls
+		WHERE tool_name LIKE 'mcp__%'
+		GROUP BY tool_name
+		ORDER BY count DESC
+	`)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "query mcp stats: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	type mcpTool struct {
+		Name  string
+		Count int
+	}
+	serverTools := map[string][]mcpTool{}
+	serverCounts := map[string]int{}
+
+	for rows.Next() {
+		var toolName string
+		var count int
+		if err := rows.Scan(&toolName, &count); err != nil {
+			writeError(w, http.StatusInternalServerError, "scan mcp stat: "+err.Error())
+			return
+		}
+		parts := strings.Split(toolName, "__")
+		if len(parts) < 3 {
+			continue
+		}
+		serverName := parts[1]
+		tool := strings.Join(parts[2:], "__")
+		serverTools[serverName] = append(serverTools[serverName], mcpTool{Name: tool, Count: count})
+		serverCounts[serverName] += count
+	}
+	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, "rows: "+err.Error())
+		return
+	}
+
+	servers := []map[string]interface{}{}
+	for name, totalCount := range serverCounts {
+		tools := []map[string]interface{}{}
+		for _, t := range serverTools[name] {
+			tools = append(tools, map[string]interface{}{
+				"name":  t.Name,
+				"count": t.Count,
+			})
+		}
+		servers = append(servers, map[string]interface{}{
+			"name":  name,
+			"count": totalCount,
+			"tools": tools,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"servers": servers,
+	})
+}
+
+// handleSessionBreakdown handles GET /api/stats/session-breakdown — per-session breakdown.
+func (s *Server) handleSessionBreakdown(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	sessionID := r.URL.Query().Get("session_id")
+	if sessionID == "" {
+		writeError(w, http.StatusBadRequest, "missing required parameter 'session_id'")
+		return
+	}
+
+	breakdown, err := s.queryBreakdown("tool_calls.session_id = ?", sessionID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "query session breakdown: "+err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, breakdown)
+}
+
+// handleProjectBreakdown handles GET /api/stats/project-breakdown — per-project breakdown.
+func (s *Server) handleProjectBreakdown(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	project := r.URL.Query().Get("project")
+	if project == "" {
+		writeError(w, http.StatusBadRequest, "missing required parameter 'project'")
+		return
+	}
+
+	breakdown, err := s.queryBreakdownByProject(project)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "query project breakdown: "+err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, breakdown)
+}
+
+// queryBreakdown queries tools, skills, MCP servers, and agents for a given WHERE clause.
+func (s *Server) queryBreakdown(whereClause string, arg string) (map[string]interface{}, error) {
+	// Tools breakdown (excluding Skill and mcp__ tools to avoid double-counting)
+	toolRows, err := s.db.Query(fmt.Sprintf(`
+		SELECT tool_name, COUNT(*) as count
+		FROM tool_calls
+		WHERE %s AND tool_name != 'Skill' AND tool_name NOT LIKE 'mcp__%%'
+		GROUP BY tool_name
+		ORDER BY count DESC
+	`, whereClause), arg)
+	if err != nil {
+		return nil, fmt.Errorf("query tools: %w", err)
+	}
+	defer toolRows.Close()
+
+	tools := []map[string]interface{}{}
+	for toolRows.Next() {
+		var name string
+		var count int
+		if err := toolRows.Scan(&name, &count); err != nil {
+			return nil, fmt.Errorf("scan tool: %w", err)
+		}
+		tools = append(tools, map[string]interface{}{
+			"name":  name,
+			"count": count,
+		})
+	}
+	if err := toolRows.Err(); err != nil {
+		return nil, fmt.Errorf("tools rows: %w", err)
+	}
+
+	// Skills breakdown
+	skillRows, err := s.db.Query(fmt.Sprintf(`
+		SELECT tool_input FROM tool_calls
+		WHERE %s AND tool_name = 'Skill'
+	`, whereClause), arg)
+	if err != nil {
+		return nil, fmt.Errorf("query skills: %w", err)
+	}
+	defer skillRows.Close()
+
+	skillCounts := map[string]int{}
+	for skillRows.Next() {
+		var toolInput sql.NullString
+		if err := skillRows.Scan(&toolInput); err != nil {
+			return nil, fmt.Errorf("scan skill: %w", err)
+		}
+		if !toolInput.Valid || toolInput.String == "" {
+			continue
+		}
+		var parsed struct {
+			Skill string `json:"skill"`
+		}
+		if err := json.Unmarshal([]byte(toolInput.String), &parsed); err != nil || parsed.Skill == "" {
+			continue
+		}
+		skillCounts[parsed.Skill]++
+	}
+	if err := skillRows.Err(); err != nil {
+		return nil, fmt.Errorf("skills rows: %w", err)
+	}
+
+	skills := []map[string]interface{}{}
+	for name, count := range skillCounts {
+		skills = append(skills, map[string]interface{}{
+			"name":  name,
+			"count": count,
+		})
+	}
+
+	// MCP breakdown
+	mcpRows, err := s.db.Query(fmt.Sprintf(`
+		SELECT tool_name, COUNT(*) as count
+		FROM tool_calls
+		WHERE %s AND tool_name LIKE 'mcp__%%'
+		GROUP BY tool_name
+		ORDER BY count DESC
+	`, whereClause), arg)
+	if err != nil {
+		return nil, fmt.Errorf("query mcp: %w", err)
+	}
+	defer mcpRows.Close()
+
+	type mcpTool struct {
+		Name  string
+		Count int
+	}
+	serverToolsMap := map[string][]mcpTool{}
+	serverCountsMap := map[string]int{}
+
+	for mcpRows.Next() {
+		var toolName string
+		var count int
+		if err := mcpRows.Scan(&toolName, &count); err != nil {
+			return nil, fmt.Errorf("scan mcp: %w", err)
+		}
+		parts := strings.Split(toolName, "__")
+		if len(parts) < 3 {
+			continue
+		}
+		serverName := parts[1]
+		tool := strings.Join(parts[2:], "__")
+		serverToolsMap[serverName] = append(serverToolsMap[serverName], mcpTool{Name: tool, Count: count})
+		serverCountsMap[serverName] += count
+	}
+	if err := mcpRows.Err(); err != nil {
+		return nil, fmt.Errorf("mcp rows: %w", err)
+	}
+
+	mcpServers := []map[string]interface{}{}
+	for name, totalCount := range serverCountsMap {
+		mcpToolsList := []map[string]interface{}{}
+		for _, t := range serverToolsMap[name] {
+			mcpToolsList = append(mcpToolsList, map[string]interface{}{
+				"name":  t.Name,
+				"count": t.Count,
+			})
+		}
+		mcpServers = append(mcpServers, map[string]interface{}{
+			"name":  name,
+			"count": totalCount,
+			"tools": mcpToolsList,
+		})
+	}
+
+	// Agents breakdown
+	agentRows, err := s.db.Query(fmt.Sprintf(`
+		SELECT agent_type, COUNT(*) as count
+		FROM subagents
+		WHERE %s
+		GROUP BY agent_type
+		ORDER BY count DESC
+	`, strings.Replace(whereClause, "tool_calls.", "subagents.", 1)), arg)
+	if err != nil {
+		return nil, fmt.Errorf("query agents: %w", err)
+	}
+	defer agentRows.Close()
+
+	agents := []map[string]interface{}{}
+	for agentRows.Next() {
+		var agentType string
+		var count int
+		if err := agentRows.Scan(&agentType, &count); err != nil {
+			return nil, fmt.Errorf("scan agent: %w", err)
+		}
+		agents = append(agents, map[string]interface{}{
+			"agent_type": agentType,
+			"count":      count,
+		})
+	}
+	if err := agentRows.Err(); err != nil {
+		return nil, fmt.Errorf("agents rows: %w", err)
+	}
+
+	return map[string]interface{}{
+		"tools":       tools,
+		"skills":      skills,
+		"mcp_servers": mcpServers,
+		"agents":      agents,
+	}, nil
+}
+
+// queryBreakdownByProject queries the breakdown for a specific project by joining with sessions.
+func (s *Server) queryBreakdownByProject(project string) (map[string]interface{}, error) {
+	// Tools breakdown
+	toolRows, err := s.db.Query(`
+		SELECT tc.tool_name, COUNT(*) as count
+		FROM tool_calls tc
+		JOIN sessions s ON tc.session_id = s.id
+		WHERE s.project_path = ? AND tc.tool_name != 'Skill' AND tc.tool_name NOT LIKE 'mcp__%'
+		GROUP BY tc.tool_name
+		ORDER BY count DESC
+	`, project)
+	if err != nil {
+		return nil, fmt.Errorf("query tools: %w", err)
+	}
+	defer toolRows.Close()
+
+	tools := []map[string]interface{}{}
+	for toolRows.Next() {
+		var name string
+		var count int
+		if err := toolRows.Scan(&name, &count); err != nil {
+			return nil, fmt.Errorf("scan tool: %w", err)
+		}
+		tools = append(tools, map[string]interface{}{
+			"name":  name,
+			"count": count,
+		})
+	}
+	if err := toolRows.Err(); err != nil {
+		return nil, fmt.Errorf("tools rows: %w", err)
+	}
+
+	// Skills breakdown
+	skillRows, err := s.db.Query(`
+		SELECT tc.tool_input FROM tool_calls tc
+		JOIN sessions s ON tc.session_id = s.id
+		WHERE s.project_path = ? AND tc.tool_name = 'Skill'
+	`, project)
+	if err != nil {
+		return nil, fmt.Errorf("query skills: %w", err)
+	}
+	defer skillRows.Close()
+
+	skillCounts := map[string]int{}
+	for skillRows.Next() {
+		var toolInput sql.NullString
+		if err := skillRows.Scan(&toolInput); err != nil {
+			return nil, fmt.Errorf("scan skill: %w", err)
+		}
+		if !toolInput.Valid || toolInput.String == "" {
+			continue
+		}
+		var parsed struct {
+			Skill string `json:"skill"`
+		}
+		if err := json.Unmarshal([]byte(toolInput.String), &parsed); err != nil || parsed.Skill == "" {
+			continue
+		}
+		skillCounts[parsed.Skill]++
+	}
+	if err := skillRows.Err(); err != nil {
+		return nil, fmt.Errorf("skills rows: %w", err)
+	}
+
+	skills := []map[string]interface{}{}
+	for name, count := range skillCounts {
+		skills = append(skills, map[string]interface{}{
+			"name":  name,
+			"count": count,
+		})
+	}
+
+	// MCP breakdown
+	mcpRows, err := s.db.Query(`
+		SELECT tc.tool_name, COUNT(*) as count
+		FROM tool_calls tc
+		JOIN sessions s ON tc.session_id = s.id
+		WHERE s.project_path = ? AND tc.tool_name LIKE 'mcp__%'
+		GROUP BY tc.tool_name
+		ORDER BY count DESC
+	`, project)
+	if err != nil {
+		return nil, fmt.Errorf("query mcp: %w", err)
+	}
+	defer mcpRows.Close()
+
+	type mcpTool struct {
+		Name  string
+		Count int
+	}
+	serverToolsMap := map[string][]mcpTool{}
+	serverCountsMap := map[string]int{}
+
+	for mcpRows.Next() {
+		var toolName string
+		var count int
+		if err := mcpRows.Scan(&toolName, &count); err != nil {
+			return nil, fmt.Errorf("scan mcp: %w", err)
+		}
+		parts := strings.Split(toolName, "__")
+		if len(parts) < 3 {
+			continue
+		}
+		serverName := parts[1]
+		tool := strings.Join(parts[2:], "__")
+		serverToolsMap[serverName] = append(serverToolsMap[serverName], mcpTool{Name: tool, Count: count})
+		serverCountsMap[serverName] += count
+	}
+	if err := mcpRows.Err(); err != nil {
+		return nil, fmt.Errorf("mcp rows: %w", err)
+	}
+
+	mcpServers := []map[string]interface{}{}
+	for name, totalCount := range serverCountsMap {
+		mcpToolsList := []map[string]interface{}{}
+		for _, t := range serverToolsMap[name] {
+			mcpToolsList = append(mcpToolsList, map[string]interface{}{
+				"name":  t.Name,
+				"count": t.Count,
+			})
+		}
+		mcpServers = append(mcpServers, map[string]interface{}{
+			"name":  name,
+			"count": totalCount,
+			"tools": mcpToolsList,
+		})
+	}
+
+	// Agents breakdown
+	agentRows, err := s.db.Query(`
+		SELECT sa.agent_type, COUNT(*) as count
+		FROM subagents sa
+		JOIN sessions s ON sa.session_id = s.id
+		WHERE s.project_path = ?
+		GROUP BY sa.agent_type
+		ORDER BY count DESC
+	`, project)
+	if err != nil {
+		return nil, fmt.Errorf("query agents: %w", err)
+	}
+	defer agentRows.Close()
+
+	agents := []map[string]interface{}{}
+	for agentRows.Next() {
+		var agentType string
+		var count int
+		if err := agentRows.Scan(&agentType, &count); err != nil {
+			return nil, fmt.Errorf("scan agent: %w", err)
+		}
+		agents = append(agents, map[string]interface{}{
+			"agent_type": agentType,
+			"count":      count,
+		})
+	}
+	if err := agentRows.Err(); err != nil {
+		return nil, fmt.Errorf("agents rows: %w", err)
+	}
+
+	return map[string]interface{}{
+		"tools":       tools,
+		"skills":      skills,
+		"mcp_servers": mcpServers,
+		"agents":      agents,
+	}, nil
+}
+
 // --- Helper query functions ---
 
 // queryMessages queries messages with optional session_id and type filters.

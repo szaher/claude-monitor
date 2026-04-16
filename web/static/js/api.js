@@ -78,6 +78,16 @@ const API = {
         return API.get('/api/stats/projects');
     },
 
+    /** Get skill usage stats. */
+    getSkillStats() {
+        return API.get('/api/stats/skills');
+    },
+
+    /** Get MCP server usage stats. */
+    getMCPStats() {
+        return API.get('/api/stats/mcp');
+    },
+
     /** Get current config. */
     getConfig() {
         return API.get('/api/config');
@@ -86,6 +96,16 @@ const API = {
     /** Save config. */
     saveConfig(cfg) {
         return API.post('/api/config', cfg);
+    },
+
+    /** Get session breakdown (tools, skills, MCP servers, agents). */
+    getSessionBreakdown(sessionId) {
+        return API.get('/api/stats/session-breakdown', { session_id: sessionId });
+    },
+
+    /** Get project breakdown (tools, skills, MCP servers, agents). */
+    getProjectBreakdown(projectPath) {
+        return API.get('/api/stats/project-breakdown', { project: projectPath });
     },
 
     /** Full-text search. */

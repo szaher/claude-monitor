@@ -190,7 +190,10 @@ const SessionsPage = {
         if (!area) return;
 
         try {
-            const data = await API.getSession(this.selectedSession);
+            const [data, breakdown] = await Promise.all([
+                API.getSession(this.selectedSession),
+                API.getSessionBreakdown(this.selectedSession).catch(() => ({})),
+            ]);
             if (!data) {
                 area.innerHTML = '<div class="empty-state"><h3>Session not found</h3></div>';
                 return;
@@ -200,6 +203,11 @@ const SessionsPage = {
             const messages = data.messages || [];
             const toolCalls = data.tool_calls || [];
             const subagents = data.subagents || [];
+
+            const bdTools = breakdown.tools || [];
+            const bdSkills = breakdown.skills || [];
+            const bdMcp = breakdown.mcp_servers || [];
+            const bdAgents = breakdown.agents || [];
 
             // Build tool call lookup: tool_use_id -> tool_call
             const toolCallMap = {};
@@ -251,19 +259,48 @@ const SessionsPage = {
                 </div>
             `;
 
-            // Subagents info (if any)
-            if (subagents.length > 0) {
-                headerHTML += `
-                    <div class="card mb-2">
-                        <div class="card-header"><h3>Subagents (${subagents.length})</h3></div>
+            // Breakdown summary cards (2x2 grid)
+            headerHTML += `
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;" class="mb-2">
+                    <div class="card">
+                        <div class="card-header"><h3>Tools Used</h3></div>
                         <div class="flex flex-wrap gap-1">
-                            ${subagents.map(sa => `
-                                <span class="badge badge-info" title="${this._esc(sa.description || '')}">${this._esc(sa.agent_type || 'agent')}</span>
-                            `).join('')}
+                            ${bdTools.length > 0
+                                ? bdTools.map(t => `<span class="badge badge-warning">${this._esc(t.name)} (${t.count})</span>`).join('')
+                                : '<span class="text-muted text-sm">None</span>'}
                         </div>
                     </div>
-                `;
-            }
+                    <div class="card">
+                        <div class="card-header"><h3>Skills Used</h3></div>
+                        <div class="flex flex-wrap gap-1">
+                            ${bdSkills.length > 0
+                                ? bdSkills.map(s => `<span class="badge badge-info">${this._esc(s.name)} (${s.count})</span>`).join('')
+                                : '<span class="text-muted text-sm">None</span>'}
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><h3>MCP Servers</h3></div>
+                        <div class="flex flex-wrap gap-1">
+                            ${bdMcp.length > 0
+                                ? bdMcp.map(m => {
+                                    const toolTip = (m.tools || []).map(t => t.name + ' (' + t.count + ')').join(', ');
+                                    return `<span class="badge badge-success" title="${this._esc(toolTip)}">${this._esc(m.name)} (${m.count})</span>`;
+                                }).join('')
+                                : '<span class="text-muted text-sm">None</span>'}
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><h3>Agents</h3></div>
+                        <div class="flex flex-wrap gap-1">
+                            ${bdAgents.length > 0
+                                ? bdAgents.map(a => `<span class="badge badge-info">${this._esc(a.agent_type)} (${a.count})</span>`).join('')
+                                : (subagents.length > 0
+                                    ? subagents.map(sa => `<span class="badge badge-info" title="${this._esc(sa.description || '')}">${this._esc(sa.agent_type || 'agent')}</span>`).join('')
+                                    : '<span class="text-muted text-sm">None</span>')}
+                        </div>
+                    </div>
+                </div>
+            `;
 
             // Conversation thread
             let threadHTML = '<div class="conversation-thread">';

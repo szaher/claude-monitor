@@ -79,6 +79,13 @@ func Import(args []string) error {
 			return nil
 		}
 
+		// Skip subagent files — they live under <session-id>/subagents/
+		relPath, _ := filepath.Rel(scanPath, path)
+		if strings.Contains(relPath, string(filepath.Separator)+"subagents"+string(filepath.Separator)) ||
+			strings.Contains(relPath, "/subagents/") {
+			return nil
+		}
+
 		// Extract session ID from filename (filename without .jsonl extension)
 		sessionID := strings.TrimSuffix(info.Name(), ".jsonl")
 
@@ -134,6 +141,13 @@ func Import(args []string) error {
 			if session.GitBranch == "" && entry.GitBranch != "" {
 				session.GitBranch = entry.GitBranch
 			}
+		}
+
+		// Prefer CWD from entries over decoded directory name for project path,
+		// since DecodeProjectPath mangles paths containing hyphens or dots.
+		if session.CWD != "" {
+			session.ProjectPath = session.CWD
+			session.ProjectName = filepath.Base(session.CWD)
 		}
 
 		// Find the last entry timestamp for ended_at
