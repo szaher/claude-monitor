@@ -461,6 +461,36 @@ func TestPipeline_ProcessHookEvent_InvalidJSON(t *testing.T) {
 	}
 }
 
+func TestProcessLogEntry_StopReason(t *testing.T) {
+	database := setupTestDB(t)
+	pipeline := NewPipeline(database, nil, nil)
+
+	sessionEntry := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-04-16T10:00:00Z","cwd":"/test","message":{"role":"user","content":"hello"}}`
+	if err := pipeline.ProcessLogEntry([]byte(sessionEntry)); err != nil {
+		t.Fatalf("ProcessLogEntry (user): %v", err)
+	}
+
+	assistantEntry := `{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-04-16T10:00:01Z","speed":"fast","message":{"role":"assistant","content":"world","model":"claude-opus-4-6","stop_reason":"end_turn","usage":{"input_tokens":10,"output_tokens":5,"service_tier":"standard"}}}`
+	if err := pipeline.ProcessLogEntry([]byte(assistantEntry)); err != nil {
+		t.Fatalf("ProcessLogEntry (assistant): %v", err)
+	}
+
+	var stopReason string
+	database.QueryRow("SELECT stop_reason FROM messages WHERE id = 'a1'").Scan(&stopReason)
+	if stopReason != "end_turn" {
+		t.Errorf("stop_reason = %q, want %q", stopReason, "end_turn")
+	}
+
+	var speed string
+	err := database.QueryRow("SELECT speed FROM session_metrics WHERE message_id = 'a1'").Scan(&speed)
+	if err != nil {
+		t.Errorf("session_metrics not found: %v", err)
+	}
+	if speed != "fast" {
+		t.Errorf("speed = %q, want %q", speed, "fast")
+	}
+}
+
 func TestPipeline_ProcessLogEntry_InvalidJSON(t *testing.T) {
 	database := setupTestDB(t)
 	p := NewPipeline(database, nil, nil)
