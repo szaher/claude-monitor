@@ -122,12 +122,13 @@ const DashboardPage = {
         this.charts = {};
 
         try {
-            const [stats, daily, tools, projects, sessions] = await Promise.all([
+            const [stats, daily, tools, projects, sessions, patterns] = await Promise.all([
                 API.getStats(),
                 API.getDailyStats(365),
                 API.getToolStats(),
                 API.getProjectStats(),
                 API.getSessions({ limit: 10 }),
+                API.getPromptPatterns().catch(() => null),
             ]);
 
             this.renderStatCards(stats);
@@ -136,6 +137,7 @@ const DashboardPage = {
             this.renderToolsChart((tools && tools.tools) || []);
             this.renderProjectsList((projects && projects.projects) || []);
             this.renderRecentSessions((sessions && sessions.sessions) || []);
+            this.renderPatterns(patterns);
         } catch (err) {
             console.error('Dashboard load error:', err);
             if (typeof App !== 'undefined' && App.toast) {
@@ -531,6 +533,66 @@ const DashboardPage = {
                 </table>
             </div>
         `;
+    },
+
+    /* ------------------------------------------------------------------
+       7. Usage Patterns (prompt category analysis)
+    ------------------------------------------------------------------ */
+    renderPatterns(patterns) {
+        if (!patterns || !patterns.categories || patterns.categories.length === 0) return;
+
+        const container = document.querySelector('.dashboard');
+        if (!container) return;
+
+        const sorted = patterns.categories.sort((a, b) => b.count - a.count);
+
+        const section = document.createElement('div');
+        section.className = 'mt-2';
+        section.innerHTML = `
+            <h3 style="margin-bottom:1rem">Usage Patterns</h3>
+            <div class="card-grid" style="grid-template-columns: 1fr 1fr;">
+                <div class="card" style="margin-bottom:0;">
+                    <div class="card-header"><h3>Prompt Categories</h3></div>
+                    <div class="chart-container" style="max-height:280px;">
+                        <canvas id="pattern-donut"></canvas>
+                    </div>
+                </div>
+                <div class="card" style="margin-bottom:0;">
+                    <div class="card-header"><h3>Category Breakdown</h3></div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>Category</th><th class="text-right">Count</th><th class="text-right">%</th></tr></thead>
+                            <tbody>${sorted.map(c =>
+                                `<tr><td>${c.name}</td><td class="text-right">${c.count}</td><td class="text-right">${c.percentage.toFixed(1)}%</td></tr>`
+                            ).join('')}</tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.appendChild(section);
+
+        const colors = ['#3b82f6','#22c55e','#f59e0b','#ef4444','#a855f7','#06b6d4','#ec4899','#84cc16'];
+        const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#888';
+
+        this.charts.patternDonut = new Chart(document.getElementById('pattern-donut'), {
+            type: 'doughnut',
+            data: {
+                labels: sorted.map(c => c.name),
+                datasets: [{
+                    data: sorted.map(c => c.count),
+                    backgroundColor: colors.slice(0, sorted.length),
+                    borderWidth: 0,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: textColor, usePointStyle: true, padding: 8, font: { size: 11 } } },
+                },
+            },
+        });
     },
 
     /* ------------------------------------------------------------------

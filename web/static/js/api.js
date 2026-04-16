@@ -98,6 +98,11 @@ const API = {
         return API.get('/api/stats/token-efficiency', params);
     },
 
+    /** Get prompt pattern analysis. */
+    getPromptPatterns(params) {
+        return API.get('/api/stats/prompt-patterns', params);
+    },
+
     /** Get current config. */
     getConfig() {
         return API.get('/api/config');
