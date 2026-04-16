@@ -11,75 +11,75 @@ import (
 
 // Config is the top-level configuration for claude-monitor.
 type Config struct {
-	Server  ServerConfig  `yaml:"server"`
-	Capture CaptureConfig `yaml:"capture"`
-	Storage StorageConfig `yaml:"storage"`
-	Cost    CostConfig    `yaml:"cost"`
-	UI      UIConfig      `yaml:"ui"`
+	Server  ServerConfig  `yaml:"server" json:"server"`
+	Capture CaptureConfig `yaml:"capture" json:"capture"`
+	Storage StorageConfig `yaml:"storage" json:"storage"`
+	Cost    CostConfig    `yaml:"cost" json:"cost"`
+	UI      UIConfig      `yaml:"ui" json:"ui"`
 }
 
 // ServerConfig holds the web server settings.
 type ServerConfig struct {
-	Port int    `yaml:"port"`
-	Host string `yaml:"host"`
+	Port int    `yaml:"port" json:"port"`
+	Host string `yaml:"host" json:"host"`
 }
 
 // CaptureConfig controls what data is captured from Claude Code sessions.
 type CaptureConfig struct {
-	Metadata MetadataConfig `yaml:"metadata"`
-	Events   EventsConfig   `yaml:"events"`
+	Metadata MetadataConfig `yaml:"metadata" json:"metadata"`
+	Events   EventsConfig   `yaml:"events" json:"events"`
 }
 
 // MetadataConfig controls which metadata fields are captured.
 type MetadataConfig struct {
-	GitBranch       bool `yaml:"git_branch"`
-	GitRepo         bool `yaml:"git_repo"`
-	WorkingDir      bool `yaml:"working_directory"`
-	ClaudeVersion   bool `yaml:"claude_version"`
-	EnvironmentVars bool `yaml:"environment_vars"`
-	CommandArgs     bool `yaml:"command_args"`
-	SystemInfo      bool `yaml:"system_info"`
+	GitBranch       bool `yaml:"git_branch" json:"git_branch"`
+	GitRepo         bool `yaml:"git_repo" json:"git_repo"`
+	WorkingDir      bool `yaml:"working_directory" json:"working_directory"`
+	ClaudeVersion   bool `yaml:"claude_version" json:"claude_version"`
+	EnvironmentVars bool `yaml:"environment_vars" json:"environment_vars"`
+	CommandArgs     bool `yaml:"command_args" json:"command_args"`
+	SystemInfo      bool `yaml:"system_info" json:"system_info"`
 }
 
 // EventsConfig controls which hook events are captured.
 type EventsConfig struct {
-	SessionStart  bool `yaml:"session_start"`
-	SessionEnd    bool `yaml:"session_end"`
-	PreToolUse    bool `yaml:"pre_tool_use"`
-	PostToolUse   bool `yaml:"post_tool_use"`
-	SubagentStart bool `yaml:"subagent_start"`
-	SubagentStop  bool `yaml:"subagent_stop"`
-	Stop          bool `yaml:"stop"`
+	SessionStart  bool `yaml:"session_start" json:"session_start"`
+	SessionEnd    bool `yaml:"session_end" json:"session_end"`
+	PreToolUse    bool `yaml:"pre_tool_use" json:"pre_tool_use"`
+	PostToolUse   bool `yaml:"post_tool_use" json:"post_tool_use"`
+	SubagentStart bool `yaml:"subagent_start" json:"subagent_start"`
+	SubagentStop  bool `yaml:"subagent_stop" json:"subagent_stop"`
+	Stop          bool `yaml:"stop" json:"stop"`
 }
 
 // StorageConfig controls where and how data is stored.
 type StorageConfig struct {
-	DatabasePath   string `yaml:"database_path"`
-	ArchivePath    string `yaml:"archive_path"`
-	ArchiveEnabled bool   `yaml:"archive_enabled"`
-	RetentionDays  int    `yaml:"retention_days"`
-	MaxDBSizeMB    int    `yaml:"max_db_size_mb"`
+	DatabasePath   string `yaml:"database_path" json:"database_path"`
+	ArchivePath    string `yaml:"archive_path" json:"archive_path"`
+	ArchiveEnabled bool   `yaml:"archive_enabled" json:"archive_enabled"`
+	RetentionDays  int    `yaml:"retention_days" json:"retention_days"`
+	MaxDBSizeMB    int    `yaml:"max_db_size_mb" json:"max_db_size_mb"`
 }
 
 // CostConfig holds model pricing information for cost estimation.
 type CostConfig struct {
-	Models map[string]ModelPricing `yaml:"models"`
+	Models map[string]ModelPricing `yaml:"models" json:"models"`
 }
 
 // ModelPricing defines the per-token pricing for a model.
 // Prices are in dollars per million tokens.
 type ModelPricing struct {
-	Input      float64 `yaml:"input"`
-	Output     float64 `yaml:"output"`
-	CacheRead  float64 `yaml:"cache_read"`
-	CacheWrite float64 `yaml:"cache_write"`
+	Input      float64 `yaml:"input" json:"input"`
+	Output     float64 `yaml:"output" json:"output"`
+	CacheRead  float64 `yaml:"cache_read" json:"cache_read"`
+	CacheWrite float64 `yaml:"cache_write" json:"cache_write"`
 }
 
 // UIConfig controls the web UI appearance and behavior.
 type UIConfig struct {
-	Theme           string `yaml:"theme"`
-	DefaultPage     string `yaml:"default_page"`
-	SessionsPerPage int    `yaml:"sessions_per_page"`
+	Theme           string `yaml:"theme" json:"theme"`
+	DefaultPage     string `yaml:"default_page" json:"default_page"`
+	SessionsPerPage int    `yaml:"sessions_per_page" json:"sessions_per_page"`
 }
 
 // DefaultConfig returns a Config populated with sensible defaults.
