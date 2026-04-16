@@ -6,10 +6,10 @@ BUILD_DIR = bin
 
 build:
 	@mkdir -p $(BUILD_DIR)
-	go build -ldflags "-X main.version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/claude-monitor
+	CGO_ENABLED=1 go build -tags fts5 -ldflags "-X main.version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/claude-monitor
 
 test:
-	go test -v ./...
+	CGO_ENABLED=1 go test -tags fts5 -v ./...
 
 clean:
 	rm -rf $(BUILD_DIR)
