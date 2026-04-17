@@ -58,7 +58,8 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 	query := `SELECT id, project_path, project_name, cwd, git_branch,
 		started_at, ended_at, claude_version, entry_point, permission_mode,
 		total_input_tokens, total_output_tokens, total_cache_read_tokens,
-		total_cache_write_tokens, estimated_cost_usd
+		total_cache_write_tokens, estimated_cost_usd,
+		COALESCE(notes,'') as notes, COALESCE(tags,'') as tags
 		FROM sessions WHERE 1=1`
 	countQuery := `SELECT COUNT(*) FROM sessions WHERE 1=1`
 
@@ -78,6 +79,12 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 		query += " AND started_at <= ?"
 		countQuery += " AND started_at <= ?"
 		args = append(args, to)
+	}
+	tag := r.URL.Query().Get("tag")
+	if tag != "" {
+		query += " AND (',' || tags || ',' LIKE '%,' || ? || ',%')"
+		countQuery += " AND (',' || tags || ',' LIKE '%,' || ? || ',%')"
+		args = append(args, tag)
 	}
 
 	// Get total count
@@ -121,13 +128,30 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 
 // handleSessionDetail handles GET /api/sessions/{id} — session detail with messages.
 func (s *Server) handleSessionDetail(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/sessions/")
+
+	// Check for sub-paths
+	if strings.Contains(path, "/timeline") {
+		s.handleSessionTimeline(w, r)
+		return
+	}
+
+	if strings.Contains(path, "/commits") {
+		s.handleSessionCommits(w, r)
+		return
+	}
+
+	if r.Method == http.MethodPatch {
+		s.handleSessionPatch(w, r)
+		return
+	}
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
 	// Extract session ID from URL path: /api/sessions/{id}
-	id := strings.TrimPrefix(r.URL.Path, "/api/sessions/")
+	id := path
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing session id")
 		return
@@ -1176,13 +1200,14 @@ func (s *Server) querySubagents(sessionID string, limit, offset int) ([]map[stri
 func scanSession(rows *sql.Rows) (map[string]interface{}, error) {
 	var id, projectPath, projectName, startedAt string
 	var cwd, gitBranch, claudeVersion, entryPoint, permissionMode, endedAt sql.NullString
+	var notes, tags sql.NullString
 	var totalInput, totalOutput, totalCacheRead, totalCacheWrite int
 	var estimatedCost float64
 
 	if err := rows.Scan(&id, &projectPath, &projectName, &cwd, &gitBranch,
 		&startedAt, &endedAt, &claudeVersion, &entryPoint, &permissionMode,
 		&totalInput, &totalOutput, &totalCacheRead, &totalCacheWrite,
-		&estimatedCost); err != nil {
+		&estimatedCost, &notes, &tags); err != nil {
 		return nil, err
 	}
 
@@ -1202,6 +1227,8 @@ func scanSession(rows *sql.Rows) (map[string]interface{}, error) {
 		"total_cache_read_tokens":  totalCacheRead,
 		"total_cache_write_tokens": totalCacheWrite,
 		"estimated_cost_usd":       estimatedCost,
+		"notes":                    notes.String,
+		"tags":                     tags.String,
 	}
 
 	return sess, nil

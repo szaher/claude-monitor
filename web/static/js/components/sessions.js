@@ -190,9 +190,10 @@ const SessionsPage = {
         if (!area) return;
 
         try {
-            const [data, breakdown] = await Promise.all([
+            const [data, breakdown, timeline] = await Promise.all([
                 API.getSession(this.selectedSession),
                 API.getSessionBreakdown(this.selectedSession).catch(() => ({})),
+                API.getSessionTimeline(this.selectedSession).catch(() => null),
             ]);
             if (!data) {
                 area.innerHTML = '<div class="empty-state"><h3>Session not found</h3></div>';
@@ -302,6 +303,35 @@ const SessionsPage = {
                 </div>
             `;
 
+            // Notes & Tags card
+            const sessionNotes = this._esc(session.notes || '');
+            const sessionTags = session.tags || '';
+            const tagsList = sessionTags ? sessionTags.split(',').map(t => t.trim()).filter(Boolean) : [];
+            const tagBadges = tagsList.map(t =>
+                `<span class="badge badge-info session-tag-badge" style="cursor:pointer;" data-tag="${this._esc(t)}">${this._esc(t)} &times;</span>`
+            ).join('');
+
+            headerHTML += `
+                <div class="card" style="margin-bottom:1.5rem">
+                    <div class="card-header"><h3>Notes & Tags</h3></div>
+                    <div class="card-body">
+                        <div style="margin-bottom:1rem">
+                            <label style="font-weight:600;display:block;margin-bottom:0.25rem">Notes</label>
+                            <textarea id="session-notes" rows="3" style="width:100%;padding:0.5rem;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)"
+                                placeholder="Add notes about this session...">${sessionNotes}</textarea>
+                        </div>
+                        <div>
+                            <label style="font-weight:600;display:block;margin-bottom:0.25rem">Tags</label>
+                            <div id="session-tags-container" style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center">
+                                ${tagBadges}
+                                <input id="session-tag-input" type="text" placeholder="Add tag..."
+                                    style="border:1px solid var(--border);border-radius:4px;padding:0.25rem 0.5rem;background:var(--bg-secondary);color:var(--text);width:120px">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
             // Conversation thread
             let threadHTML = '<div class="conversation-thread">';
 
@@ -316,6 +346,138 @@ const SessionsPage = {
             threadHTML += '</div>';
 
             area.innerHTML = headerHTML + threadHTML;
+
+            // Timeline visualization
+            if (timeline && timeline.events && timeline.events.length > 0) {
+                const timelineHtml = `
+                <div class="card" style="margin-bottom:1.5rem">
+                    <div class="card-header"><h3>Session Timeline</h3></div>
+                    <div class="card-body">
+                        <div class="card-grid" style="grid-template-columns: repeat(3, 1fr);margin-bottom:1rem">
+                            <div style="text-align:center"><div class="text-muted text-sm">Duration</div><div class="font-bold">${this._formatDuration(timeline.duration_seconds)}</div></div>
+                            <div style="text-align:center"><div class="text-muted text-sm">Total Tokens</div><div class="font-bold">${(timeline.total_tokens || 0).toLocaleString()}</div></div>
+                            <div style="text-align:center"><div class="text-muted text-sm">Events</div><div class="font-bold">${timeline.events.length}</div></div>
+                        </div>
+                        <div id="timeline-bar" style="position:relative;height:60px;background:var(--bg-secondary);border-radius:4px;overflow:hidden;margin-top:0.5rem">
+                            ${timeline.events.map((evt, i) => {
+                                const colors = {
+                                    user_message: '#3b82f6', assistant_message: '#22c55e',
+                                    tool_call: '#f59e0b', agent_spawn: '#a855f7',
+                                    compaction: '#6b7280',
+                                };
+                                const color = evt.success === false ? '#ef4444' : (colors[evt.type] || '#999');
+                                const pct = timeline.duration_seconds > 0
+                                    ? ((new Date(evt.timestamp) - new Date(timeline.events[0].timestamp)) / (timeline.duration_seconds * 1000) * 100)
+                                    : (i / timeline.events.length * 100);
+                                const lane = { user_message: 10, assistant_message: 25, tool_call: 40, agent_spawn: 55, compaction: 55 }[evt.type] || 25;
+                                const label = evt.tool || evt.agent_type || evt.type.replace('_', ' ');
+                                return '<div style="position:absolute;left:' + Math.min(pct, 98) + '%;top:' + lane + 'px;width:8px;height:8px;border-radius:50%;background:' + color + ';cursor:pointer" title="' + this._esc(label) + ': ' + evt.timestamp + '"></div>';
+                            }).join('')}
+                        </div>
+                        <div style="display:flex;gap:1rem;font-size:0.75rem;color:var(--text-secondary);margin-top:0.5rem">
+                            <span style="color:#3b82f6">&#9679; User</span>
+                            <span style="color:#22c55e">&#9679; Assistant</span>
+                            <span style="color:#f59e0b">&#9679; Tool</span>
+                            <span style="color:#a855f7">&#9679; Agent</span>
+                            <span style="color:#ef4444">&#9679; Error</span>
+                        </div>
+                    </div>
+                </div>`;
+                // Insert before the conversation thread
+                const threadEl = area.querySelector('.conversation-thread');
+                if (threadEl) {
+                    threadEl.insertAdjacentHTML('beforebegin', timelineHtml);
+                }
+            }
+
+            // Git Commits section
+            const commitsData = await API.getSessionCommits(this.selectedSession).catch(() => null);
+
+            if (commitsData) {
+                const commits = commitsData.commits || [];
+                const commitsHtml = `
+                <div class="card" style="margin-bottom:1.5rem">
+                    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+                        <h3>Git Commits (${commits.length})</h3>
+                        <button id="git-sync-btn" class="btn btn-secondary" style="font-size:0.8rem">Sync Git</button>
+                    </div>
+                    <div class="card-body">
+                        ${commits.length > 0 ? `
+                        <table class="table">
+                            <thead><tr><th>Hash</th><th>Message</th><th>Changes</th><th>Time</th></tr></thead>
+                            <tbody>${commits.map(c => `
+                                <tr>
+                                    <td style="font-family:monospace;font-size:0.85rem">${c.commit_hash.substring(0, 7)}</td>
+                                    <td>${this._esc(c.commit_message)}</td>
+                                    <td style="white-space:nowrap">
+                                        <span style="color:var(--success)">+${c.insertions}</span>
+                                        <span style="color:var(--danger)">-${c.deletions}</span>
+                                        <span style="color:var(--text-secondary)">(${c.files_changed} files)</span>
+                                    </td>
+                                    <td style="white-space:nowrap">${new Date(c.committed_at).toLocaleString()}</td>
+                                </tr>
+                            `).join('')}</tbody>
+                        </table>` : '<p class="text-muted">No commits found. Click "Sync Git" to scan.</p>'}
+                    </div>
+                </div>`;
+                const threadEl = area.querySelector('.conversation-thread');
+                if (threadEl) {
+                    threadEl.insertAdjacentHTML('beforebegin', commitsHtml);
+                } else {
+                    area.insertAdjacentHTML('beforeend', commitsHtml);
+                }
+
+                area.querySelector('#git-sync-btn')?.addEventListener('click', async () => {
+                    await API.triggerGitSync(this.selectedSession);
+                    if (typeof App !== 'undefined' && App.toast) {
+                        App.toast('Git sync started', 'info');
+                    }
+                    setTimeout(() => this.loadDetail(), 3000);
+                });
+            }
+
+            // Bind Notes auto-save on blur
+            const notesEl = document.getElementById('session-notes');
+            if (notesEl) {
+                notesEl.addEventListener('blur', () => {
+                    API.updateSession(this.selectedSession, { notes: notesEl.value });
+                });
+            }
+
+            // Bind tag input (Enter to add)
+            const tagInput = document.getElementById('session-tag-input');
+            if (tagInput) {
+                tagInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const newTag = tagInput.value.trim();
+                        if (!newTag) return;
+                        const currentTags = this._getCurrentTags();
+                        if (!currentTags.includes(newTag)) {
+                            currentTags.push(newTag);
+                            API.updateSession(this.selectedSession, { tags: currentTags.join(',') }).then(() => {
+                                const container = document.getElementById('main-content');
+                                container.innerHTML = '';
+                                this.render(container);
+                            });
+                        }
+                        tagInput.value = '';
+                    }
+                });
+            }
+
+            // Bind tag removal on badge click
+            area.querySelectorAll('.session-tag-badge').forEach(badge => {
+                badge.addEventListener('click', () => {
+                    const tagToRemove = badge.dataset.tag;
+                    const currentTags = this._getCurrentTags().filter(t => t !== tagToRemove);
+                    API.updateSession(this.selectedSession, { tags: currentTags.join(',') }).then(() => {
+                        const container = document.getElementById('main-content');
+                        container.innerHTML = '';
+                        this.render(container);
+                    });
+                });
+            });
 
             // Bind collapsible toggles
             this.bindCollapsibles(area);
@@ -494,6 +656,23 @@ const SessionsPage = {
     /* ------------------------------------------------------------------
        Helpers
     ------------------------------------------------------------------ */
+
+    /** Get current tags from the DOM badges. */
+    _getCurrentTags() {
+        const badges = document.querySelectorAll('.session-tag-badge');
+        return Array.from(badges).map(b => b.dataset.tag).filter(Boolean);
+    },
+
+    /** Format a duration in seconds to a human-readable string. */
+    _formatDuration(seconds) {
+        if (!seconds) return '0s';
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = seconds % 60;
+        if (h > 0) return `${h}h ${m}m`;
+        if (m > 0) return `${m}m ${s}s`;
+        return `${s}s`;
+    },
 
     /** Minimal HTML escaping to avoid XSS in dynamic content. */
     _esc(str) {

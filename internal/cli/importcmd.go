@@ -185,6 +185,7 @@ func Import(args []string) error {
 				Type:             entry.Type,
 				Role:             entry.Message.Role,
 				Model:            entry.Message.Model,
+				StopReason:       entry.Message.StopReason,
 				ContentText:      contentText,
 				ContentJSON:      string(contentJSON),
 				InputTokens:      entry.Message.Usage.InputTokens,
@@ -199,6 +200,49 @@ func Import(args []string) error {
 				continue
 			}
 			msgCount++
+
+			// Extract tool results from user entries
+			if entry.Type == "user" {
+				if arr, ok := entry.Message.Content.([]interface{}); ok {
+					for _, item := range arr {
+						block, ok := item.(map[string]interface{})
+						if !ok {
+							continue
+						}
+						if blockType, _ := block["type"].(string); blockType != "tool_result" {
+							continue
+						}
+						toolUseID, _ := block["tool_use_id"].(string)
+						if toolUseID == "" {
+							continue
+						}
+						isError, _ := block["is_error"].(bool)
+						var durationMS int
+						var stderr, stdoutPreview string
+						if content, ok := block["content"].([]interface{}); ok {
+							for _, c := range content {
+								cb, ok := c.(map[string]interface{})
+								if !ok {
+									continue
+								}
+								if dur, ok := cb["durationMs"].(float64); ok {
+									durationMS = int(dur)
+								}
+								if s, ok := cb["stderr"].(string); ok {
+									stderr = s
+								}
+								if s, ok := cb["stdout"].(string); ok {
+									if len(s) > 500 {
+										s = s[:500]
+									}
+									stdoutPreview = s
+								}
+							}
+						}
+						db.UpdateToolCallResult(database, toolUseID, durationMS, !isError, stderr, stdoutPreview)
+					}
+				}
+			}
 
 			// Extract tool calls from assistant messages
 			if entry.Type == "assistant" {

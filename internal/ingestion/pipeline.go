@@ -148,6 +148,11 @@ func (p *Pipeline) ProcessLogEntry(data []byte) error {
 		return p.processAttachmentEntry(entry)
 	}
 
+	// Extract tool results from user entries
+	if entry.Type == "user" {
+		p.extractToolResults(entry)
+	}
+
 	// Skip non-message types (permission-mode, file-history-snapshot, last-prompt, queue-operation)
 	if entry.Type != "user" && entry.Type != "assistant" {
 		return nil
@@ -163,6 +168,7 @@ func (p *Pipeline) ProcessLogEntry(data []byte) error {
 		Type:             entry.Type,
 		Role:             entry.Message.Role,
 		Model:            entry.Message.Model,
+		StopReason:       entry.Message.StopReason,
 		ContentText:      contentText,
 		ContentJSON:      string(contentJSON),
 		InputTokens:      entry.Message.Usage.InputTokens,
@@ -195,6 +201,20 @@ func (p *Pipeline) ProcessLogEntry(data []byte) error {
 			}
 		}
 
+		// Insert session metric for expanded capture
+		metric := &models.SessionMetric{
+			SessionID:   entry.SessionID,
+			MessageID:   entry.UUID,
+			Speed:       entry.Speed,
+			ServiceTier: entry.Message.Usage.ServiceTier,
+			Timestamp:   entry.Timestamp,
+		}
+		if entry.Message.Usage.CacheCreation != nil {
+			metric.CacheEphemeral5mTokens = entry.Message.Usage.CacheCreation.Ephemeral5mTokens
+			metric.CacheEphemeral1hTokens = entry.Message.Usage.CacheCreation.Ephemeral1hTokens
+		}
+		db.InsertSessionMetric(p.database, metric)
+
 		// Update session token counts and cost by incrementing
 		if entry.Message.Usage.InputTokens > 0 || entry.Message.Usage.OutputTokens > 0 {
 			p.incrementSessionTokens(entry.SessionID, entry.Message.Usage, entry.Message.Model)
@@ -221,6 +241,18 @@ func (p *Pipeline) processSystemEntry(entry *parser.LogEntry) error {
 	}
 	if entry.Subtype != "" {
 		contentText = entry.Subtype + ": " + contentText
+	}
+
+	if entry.Subtype == "compact" {
+		compaction := &models.ContextCompaction{
+			SessionID:     entry.SessionID,
+			PreTokens:     0,
+			PostTokens:    0,
+			TriggerReason: "context_limit",
+			DurationMS:    entry.DurationMs,
+			Timestamp:     entry.Timestamp,
+		}
+		db.InsertContextCompaction(p.database, compaction)
 	}
 
 	msg := &models.Message{
@@ -274,6 +306,52 @@ func (p *Pipeline) processAttachmentEntry(entry *parser.LogEntry) error {
 	}
 
 	return db.InsertMessage(p.database, msg)
+}
+
+func (p *Pipeline) extractToolResults(entry *parser.LogEntry) {
+	arr, ok := entry.Message.Content.([]interface{})
+	if !ok {
+		return
+	}
+	for _, item := range arr {
+		block, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		blockType, _ := block["type"].(string)
+		if blockType != "tool_result" {
+			continue
+		}
+		toolUseID, _ := block["tool_use_id"].(string)
+		if toolUseID == "" {
+			continue
+		}
+		isError, _ := block["is_error"].(bool)
+		success := !isError
+		var durationMS int
+		var stderr, stdoutPreview string
+		if content, ok := block["content"].([]interface{}); ok {
+			for _, c := range content {
+				cb, ok := c.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				if dur, ok := cb["durationMs"].(float64); ok {
+					durationMS = int(dur)
+				}
+				if s, ok := cb["stderr"].(string); ok {
+					stderr = s
+				}
+				if s, ok := cb["stdout"].(string); ok {
+					if len(s) > 500 {
+						s = s[:500]
+					}
+					stdoutPreview = s
+				}
+			}
+		}
+		db.UpdateToolCallResult(p.database, toolUseID, durationMS, success, stderr, stdoutPreview)
+	}
 }
 
 // StartBatchProcessor reads from eventCh, buffers events, and flushes

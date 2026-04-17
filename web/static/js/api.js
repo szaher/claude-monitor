@@ -88,6 +88,26 @@ const API = {
         return API.get('/api/stats/mcp');
     },
 
+    /** Get error analysis stats. */
+    getErrorStats(params) {
+        return API.get('/api/stats/errors', params);
+    },
+
+    /** Get token efficiency stats. */
+    getTokenEfficiency(params) {
+        return API.get('/api/stats/token-efficiency', params);
+    },
+
+    /** Get prompt pattern analysis. */
+    getPromptPatterns(params) {
+        return API.get('/api/stats/prompt-patterns', params);
+    },
+
+    /** Get file activity heatmap for a project. */
+    getFileHeatmap(project) {
+        return API.get('/api/stats/file-heatmap', { project });
+    },
+
     /** Get current config. */
     getConfig() {
         return API.get('/api/config');
@@ -96,6 +116,11 @@ const API = {
     /** Save config. */
     saveConfig(cfg) {
         return API.post('/api/config', cfg);
+    },
+
+    /** Get session timeline (events, duration, tokens). */
+    getSessionTimeline(sessionId) {
+        return API.get(`/api/sessions/${sessionId}/timeline`);
     },
 
     /** Get session breakdown (tools, skills, MCP servers, agents). */
@@ -111,5 +136,67 @@ const API = {
     /** Full-text search. */
     search(q, limit) {
         return API.get('/api/search', { q, limit });
+    },
+
+    /** Update session notes/tags via PATCH. */
+    updateSession(id, data) {
+        return fetch(`/api/sessions/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        }).then(r => r.json());
+    },
+
+    /** Get all tags with counts. */
+    getTags() {
+        return API.get('/api/tags');
+    },
+
+    /** List all budgets. */
+    getBudgets() {
+        return API.get('/api/budgets');
+    },
+
+    /** Create a new budget. */
+    createBudget(budget) {
+        return API.post('/api/budgets', budget);
+    },
+
+    /** Update an existing budget. */
+    updateBudget(id, budget) {
+        return fetch(`/api/budgets/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(budget),
+        }).then(r => r.json());
+    },
+
+    /** Delete a budget. */
+    deleteBudget(id) {
+        return fetch(`/api/budgets/${id}`, { method: 'DELETE' }).then(r => r.json());
+    },
+
+    /** Get budget status with current spend. */
+    getBudgetStatus() {
+        return API.get('/api/budgets/status');
+    },
+
+    /** Get git commits for a session. */
+    getSessionCommits(sessionId) {
+        return API.get(`/api/sessions/${sessionId}/commits`);
+    },
+
+    /** Trigger git sync for a session. */
+    triggerGitSync(sessionId) {
+        return API.post('/api/git-sync', { session_id: sessionId });
+    },
+
+    /** Build an export download URL with the given params. */
+    getExportURL(params) {
+        const url = new URL('/api/export', window.location.origin);
+        Object.entries(params).forEach(([k, v]) => {
+            if (v) url.searchParams.set(k, v);
+        });
+        return url.toString();
     },
 };

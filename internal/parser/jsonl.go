@@ -32,6 +32,16 @@ type LogEntry struct {
 
 	// Attachment entry fields
 	Attachment *AttachmentData `json:"attachment,omitempty"`
+
+	// New fields for expanded capture
+	Speed         string         `json:"speed,omitempty"`
+	ServerToolUse *ServerToolUse `json:"server_tool_use,omitempty"`
+}
+
+// ServerToolUse tracks server-side tool usage counts.
+type ServerToolUse struct {
+	WebSearchCount int `json:"web_search_count"`
+	WebFetchCount  int `json:"web_fetch_count"`
 }
 
 // AttachmentData holds data from attachment-type log entries (hooks, permissions, etc.)
@@ -50,18 +60,27 @@ type AttachmentData struct {
 
 // MessageData holds the message payload within a log entry.
 type MessageData struct {
-	Role    string      `json:"role"`
-	Content interface{} `json:"content"` // string for user, []ContentBlock for assistant
-	Model   string      `json:"model"`
-	Usage   Usage       `json:"usage"`
+	Role       string      `json:"role"`
+	Content    interface{} `json:"content"` // string for user, []ContentBlock for assistant
+	Model      string      `json:"model"`
+	Usage      Usage       `json:"usage"`
+	StopReason string      `json:"stop_reason"`
 }
 
 // Usage tracks token counts for a single message.
 type Usage struct {
-	InputTokens              int `json:"input_tokens"`
-	OutputTokens             int `json:"output_tokens"`
-	CacheReadInputTokens     int `json:"cache_read_input_tokens"`
-	CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+	InputTokens              int                  `json:"input_tokens"`
+	OutputTokens             int                  `json:"output_tokens"`
+	CacheReadInputTokens     int                  `json:"cache_read_input_tokens"`
+	CacheCreationInputTokens int                  `json:"cache_creation_input_tokens"`
+	ServiceTier              string               `json:"service_tier,omitempty"`
+	CacheCreation            *CacheCreationDetail `json:"cache_creation,omitempty"`
+}
+
+// CacheCreationDetail holds granular cache creation token breakdowns.
+type CacheCreationDetail struct {
+	Ephemeral5mTokens int `json:"ephemeral_5m_input_tokens"`
+	Ephemeral1hTokens int `json:"ephemeral_1h_input_tokens"`
 }
 
 // ContentBlock represents a single block within an assistant message's content array.

@@ -86,10 +86,12 @@ const CostPage = {
         this.destroyCharts();
 
         try {
-            const [dailyData, modelData, projectData] = await Promise.all([
+            const [dailyData, modelData, projectData, efficiencyData, budgetStatus] = await Promise.all([
                 API.getDailyStats(90),
                 API.getModelStats(),
                 API.getProjectStats(),
+                API.getTokenEfficiency().catch(() => null),
+                API.getBudgetStatus().catch(() => null),
             ]);
 
             const days = (dailyData && dailyData.days) || [];
@@ -102,6 +104,8 @@ const CostPage = {
             this.renderProjectChart(projects);
             this.renderCacheAnalysis(days);
             this.renderCostProjection(days);
+            this.renderTokenEfficiency(efficiencyData);
+            this.renderBudgets(budgetStatus);
         } catch (err) {
             console.error('Cost page load error:', err);
             App.toast('Failed to load cost data: ' + err.message, 'error');
@@ -445,6 +449,152 @@ const CostPage = {
             </div>
             <div class="text-muted text-sm mt-1">Projection based on 7-day rolling average of ${formatCost(last7Avg)}/day.</div>
         `;
+    },
+
+    /* ---- Token Efficiency ---- */
+    renderTokenEfficiency(data) {
+        if (!data) return;
+        const container = document.querySelector('.cost-page');
+        if (!container) return;
+
+        const section = document.createElement('div');
+        section.className = 'token-efficiency-section mt-2';
+        section.innerHTML = `
+            <h2 class="mt-2">Token Efficiency</h2>
+            <div class="card-grid mt-2" style="grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));">
+                <div class="card stat-card" style="margin-bottom:0;">
+                    <div class="stat-value" style="color:var(--accent-success);">${((data.cache_hit_rate || 0) * 100).toFixed(1)}%</div>
+                    <div class="stat-label">Cache Hit Rate</div>
+                </div>
+                <div class="card stat-card" style="margin-bottom:0;">
+                    <div class="stat-value" style="color:var(--accent-success);">$${(data.cache_savings_usd || 0).toFixed(2)}</div>
+                    <div class="stat-label">Cache Savings</div>
+                </div>
+                <div class="card stat-card" style="margin-bottom:0;">
+                    <div class="stat-value">${Math.round(data.avg_tokens_per_tool_call || 0).toLocaleString()}</div>
+                    <div class="stat-label">Avg Tokens/Tool Call</div>
+                </div>
+                <div class="card stat-card" style="margin-bottom:0;">
+                    <div class="stat-value">${Math.round(data.avg_output_tokens_per_message || 0).toLocaleString()}</div>
+                    <div class="stat-label">Avg Output/Message</div>
+                </div>
+            </div>
+            ${data.efficiency_by_model && data.efficiency_by_model.length > 0 ? `
+            <div class="card mt-2">
+                <div class="card-header"><h3>Efficiency by Model</h3></div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead><tr><th>Model</th><th class="text-right">Cache Hit Rate</th><th class="text-right">Output Ratio</th></tr></thead>
+                        <tbody>${data.efficiency_by_model.map(m =>
+                            `<tr><td>${this._esc(m.model)}</td><td class="text-right">${(m.cache_hit_rate * 100).toFixed(1)}%</td><td class="text-right">${(m.avg_output_ratio * 100).toFixed(1)}%</td></tr>`
+                        ).join('')}</tbody>
+                    </table>
+                </div>
+            </div>` : ''}
+        `;
+        container.appendChild(section);
+    },
+
+    /* ---- Budgets ---- */
+    renderBudgets(data) {
+        const container = document.querySelector('.cost-page');
+        if (!container) return;
+
+        const section = document.createElement('div');
+        section.className = 'budget-section mt-2';
+
+        const budgets = (data && data.budgets) || [];
+
+        let tableRows = '';
+        if (budgets.length > 0) {
+            tableRows = budgets.map(b => {
+                const pct = (b.percentage || 0).toFixed(1);
+                let barColor = 'var(--accent-success)';
+                if (b.status === 'exceeded') barColor = 'var(--accent-danger)';
+                else if (b.status === 'warning') barColor = 'var(--accent-warning)';
+
+                return `<tr>
+                    <td>${this._esc(b.name)}</td>
+                    <td>${this._esc(b.project_path || 'All')}</td>
+                    <td>${this._esc(b.period)}</td>
+                    <td class="text-right">${formatCost(b.amount_usd)}</td>
+                    <td class="text-right">${formatCost(b.current_spend)}</td>
+                    <td style="min-width:120px;">
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <div style="flex:1;background:var(--bg-tertiary);border-radius:4px;height:8px;overflow:hidden;">
+                                <div style="background:${barColor};height:100%;width:${Math.min(parseFloat(pct), 100)}%;border-radius:4px;"></div>
+                            </div>
+                            <span style="font-size:0.8rem;color:${barColor};font-weight:600;">${pct}%</span>
+                        </div>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-danger" onclick="CostPage._deleteBudget(${b.id})" style="padding:2px 8px;font-size:0.75rem;">Delete</button>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        section.innerHTML = `
+            <div class="card">
+                <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+                    <h3>Budgets</h3>
+                    <button class="btn btn-sm" onclick="CostPage._addBudget()" style="padding:4px 12px;">Add Budget</button>
+                </div>
+                ${budgets.length > 0 ? `
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Project</th>
+                                <th>Period</th>
+                                <th class="text-right">Budget</th>
+                                <th class="text-right">Spent</th>
+                                <th>Progress</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>${tableRows}</tbody>
+                    </table>
+                </div>` : '<div class="empty-state"><p>No budgets configured. Click "Add Budget" to create one.</p></div>'}
+            </div>
+        `;
+        container.appendChild(section);
+    },
+
+    async _addBudget() {
+        const name = prompt('Budget name:');
+        if (!name) return;
+        const period = prompt('Period (daily, weekly, monthly):', 'monthly');
+        if (!period || !['daily', 'weekly', 'monthly'].includes(period)) {
+            if (typeof App !== 'undefined' && App.toast) App.toast('Invalid period. Use daily, weekly, or monthly.', 'error');
+            return;
+        }
+        const amountStr = prompt('Budget amount (USD):', '100');
+        if (!amountStr) return;
+        const amount = parseFloat(amountStr);
+        if (isNaN(amount) || amount <= 0) {
+            if (typeof App !== 'undefined' && App.toast) App.toast('Invalid amount.', 'error');
+            return;
+        }
+        try {
+            await API.createBudget({ name, period, amount_usd: amount });
+            const container = document.getElementById('main-content');
+            if (container) { container.innerHTML = ''; this.render(container); }
+        } catch (err) {
+            if (typeof App !== 'undefined' && App.toast) App.toast('Failed to create budget: ' + err.message, 'error');
+        }
+    },
+
+    async _deleteBudget(id) {
+        if (!confirm('Delete this budget?')) return;
+        try {
+            await API.deleteBudget(id);
+            const container = document.getElementById('main-content');
+            if (container) { container.innerHTML = ''; this.render(container); }
+        } catch (err) {
+            if (typeof App !== 'undefined' && App.toast) App.toast('Failed to delete budget: ' + err.message, 'error');
+        }
     },
 
     /* ---- Helpers ---- */

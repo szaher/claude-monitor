@@ -270,6 +270,31 @@ func TestExtractToolCalls(t *testing.T) {
 	}
 }
 
+func TestParseLogEntry_NewFields(t *testing.T) {
+	raw := `{"type":"assistant","uuid":"abc","timestamp":"2026-04-16T10:00:00Z","sessionId":"s1","speed":"fast","server_tool_use":{"web_search_count":2,"web_fetch_count":1},"message":{"role":"assistant","content":"hello","model":"claude-opus-4-6","usage":{"input_tokens":100,"output_tokens":50,"service_tier":"standard","cache_creation":{"ephemeral_5m_input_tokens":500,"ephemeral_1h_input_tokens":0}},"stop_reason":"end_turn"}}`
+
+	entry, err := ParseLogEntry([]byte(raw))
+	if err != nil {
+		t.Fatalf("ParseLogEntry: %v", err)
+	}
+
+	if entry.Speed != "fast" {
+		t.Errorf("Speed = %q, want %q", entry.Speed, "fast")
+	}
+	if entry.ServerToolUse == nil || entry.ServerToolUse.WebSearchCount != 2 {
+		t.Errorf("ServerToolUse.WebSearchCount = %v, want 2", entry.ServerToolUse)
+	}
+	if entry.Message.StopReason != "end_turn" {
+		t.Errorf("StopReason = %q, want %q", entry.Message.StopReason, "end_turn")
+	}
+	if entry.Message.Usage.ServiceTier != "standard" {
+		t.Errorf("ServiceTier = %q, want %q", entry.Message.Usage.ServiceTier, "standard")
+	}
+	if entry.Message.Usage.CacheCreation == nil || entry.Message.Usage.CacheCreation.Ephemeral5mTokens != 500 {
+		t.Errorf("CacheCreation.Ephemeral5mTokens = %v, want 500", entry.Message.Usage.CacheCreation)
+	}
+}
+
 func TestDecodeProjectPath(t *testing.T) {
 	tests := []struct {
 		encoded  string

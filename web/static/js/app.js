@@ -225,6 +225,55 @@ const App = {
             toggle.classList.remove('open');
             overlay.classList.remove('active');
         });
+
+        const header = document.querySelector('.header') || document.querySelector('header');
+        if (header) {
+            const exportBtn = document.createElement('button');
+            exportBtn.className = 'btn btn-secondary';
+            exportBtn.textContent = 'Export';
+            exportBtn.style.cssText = 'margin-left:auto;margin-right:1rem';
+            exportBtn.addEventListener('click', () => App.showExportModal());
+            header.appendChild(exportBtn);
+        }
+    },
+
+    /* ------------------------------------------------------------------
+       Export Modal
+    ------------------------------------------------------------------ */
+    showExportModal() {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center';
+        overlay.innerHTML = `
+            <div style="background:var(--bg-primary);border-radius:8px;padding:2rem;max-width:400px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,0.3)">
+                <h3 style="margin:0 0 1.5rem">Export Data</h3>
+                <div style="margin-bottom:1rem">
+                    <label style="display:block;margin-bottom:0.25rem;font-weight:600">Format</label>
+                    <select id="export-format" style="width:100%;padding:0.5rem;border:1px solid var(--border-color);border-radius:4px;background:var(--bg-secondary);color:var(--text-primary)">
+                        <option value="json">JSON</option>
+                        <option value="csv">CSV (ZIP)</option>
+                        <option value="html">HTML Report</option>
+                    </select>
+                </div>
+                <div style="display:flex;gap:1rem;justify-content:flex-end;margin-top:1.5rem">
+                    <button id="export-cancel" class="btn btn-secondary">Cancel</button>
+                    <button id="export-download" class="btn btn-primary">Download</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        overlay.querySelector('#export-cancel').addEventListener('click', () => overlay.remove());
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+        overlay.querySelector('#export-download').addEventListener('click', () => {
+            const format = overlay.querySelector('#export-format').value;
+            const params = new URLSearchParams({ format });
+            if (this.filters.project) params.set('project', this.filters.project);
+            if (this.filters.from) params.set('from', this.filters.from);
+            if (this.filters.to) params.set('to', this.filters.to);
+            window.location.href = '/api/export?' + params.toString();
+            overlay.remove();
+        });
     },
 
     /* ------------------------------------------------------------------

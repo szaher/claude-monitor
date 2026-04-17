@@ -261,6 +261,41 @@ const ProjectsPage = {
             this.renderDetailTokensChart(sessions);
             this.renderDetailSessionsTable(sessions);
 
+            // Add after this.renderDetailSessionsTable(sessions);
+            const heatmap = await API.getFileHeatmap(this.selectedProject).catch(() => null);
+            if (heatmap && heatmap.files && heatmap.files.length > 0) {
+                const maxTotal = Math.max(...heatmap.files.map(f => f.total));
+                const fileHtml = `
+                <div class="card mt-2">
+                    <div class="card-header"><h3>File Activity Heatmap</h3></div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>File</th><th class="text-right">Reads</th><th class="text-right">Writes</th><th class="text-right">Edits</th><th class="text-right">Total</th><th style="width:100px"></th></tr></thead>
+                            <tbody>${heatmap.files.slice(0, 20).map(f => `
+                                <tr>
+                                    <td class="truncate font-mono text-sm" style="max-width:350px;" title="${this._esc(f.path)}">${this._esc(f.path)}</td>
+                                    <td class="text-right">${f.reads}</td>
+                                    <td class="text-right">${f.writes}</td>
+                                    <td class="text-right">${f.edits}</td>
+                                    <td class="text-right"><strong>${f.total}</strong></td>
+                                    <td style="width:100px">
+                                        <div style="background:var(--bg-secondary);border-radius:2px;height:12px;overflow:hidden">
+                                            <div style="height:100%;width:${(f.total/maxTotal*100).toFixed(0)}%;background:linear-gradient(90deg,#3b82f6 ${(f.reads/f.total*100).toFixed(0)}%,#f59e0b ${(f.reads/f.total*100).toFixed(0)}%,#f59e0b ${((f.reads+f.writes)/f.total*100).toFixed(0)}%,#22c55e ${((f.reads+f.writes)/f.total*100).toFixed(0)}%)"></div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `).join('')}</tbody>
+                        </table>
+                    </div>
+                    <div style="display:flex;gap:1rem;font-size:0.75rem;color:var(--text-secondary);margin-top:0.5rem;padding:0 1rem 0.5rem">
+                        <span style="color:#3b82f6">&#9632; Reads</span>
+                        <span style="color:#f59e0b">&#9632; Writes</span>
+                        <span style="color:#22c55e">&#9632; Edits</span>
+                    </div>
+                </div>`;
+                area.insertAdjacentHTML('beforeend', fileHtml);
+            }
+
         } catch (err) {
             console.error('Project detail error:', err);
             area.innerHTML = `<div class="empty-state"><h3>Error</h3><p>${this._esc(err.message)}</p></div>`;

@@ -122,12 +122,14 @@ func GetSessionByID(db *sql.DB, id string) (*models.Session, error) {
 	var startedAt string
 	var endedAt sql.NullString
 	var cwd, gitBranch, claudeVersion, entryPoint, permissionMode sql.NullString
+	var notes, tags sql.NullString
 
 	err := db.QueryRow(`
 		SELECT id, project_path, project_name, cwd, git_branch,
 			started_at, ended_at, claude_version, entry_point, permission_mode,
 			total_input_tokens, total_output_tokens, total_cache_read_tokens,
-			total_cache_write_tokens, estimated_cost_usd
+			total_cache_write_tokens, estimated_cost_usd,
+			COALESCE(notes,'') as notes, COALESCE(tags,'') as tags
 		FROM sessions WHERE id = ?
 	`, id).Scan(
 		&s.ID, &s.ProjectPath, &s.ProjectName,
@@ -137,6 +139,7 @@ func GetSessionByID(db *sql.DB, id string) (*models.Session, error) {
 		&s.TotalInputTokens, &s.TotalOutputTokens,
 		&s.TotalCacheReadTokens, &s.TotalCacheWriteTokens,
 		&s.EstimatedCostUSD,
+		&notes, &tags,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("get session %s: %w", id, err)
@@ -147,6 +150,8 @@ func GetSessionByID(db *sql.DB, id string) (*models.Session, error) {
 	s.ClaudeVersion = claudeVersion.String
 	s.EntryPoint = entryPoint.String
 	s.PermissionMode = permissionMode.String
+	s.Notes = notes.String
+	s.Tags = tags.String
 
 	t, err := time.Parse(time.RFC3339, startedAt)
 	if err != nil {
@@ -281,4 +286,130 @@ func SearchMessages(db *sql.DB, query string, limit int) ([]*models.Message, err
 		return nil, fmt.Errorf("rows iteration: %w", err)
 	}
 	return messages, nil
+}
+
+// InsertSessionMetric inserts a session metric record.
+func InsertSessionMetric(db *sql.DB, m *models.SessionMetric) error {
+	_, err := db.Exec(`
+		INSERT INTO session_metrics (
+			session_id, message_id, speed, service_tier, inference_geo,
+			cache_ephemeral_5m_tokens, cache_ephemeral_1h_tokens, timestamp
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		m.SessionID, m.MessageID, m.Speed, m.ServiceTier, m.InferenceGeo,
+		m.CacheEphemeral5mTokens, m.CacheEphemeral1hTokens,
+		m.Timestamp.UTC().Format(time.RFC3339),
+	)
+	if err != nil {
+		return fmt.Errorf("insert session metric: %w", err)
+	}
+	return nil
+}
+
+// InsertContextCompaction inserts a context compaction record.
+func InsertContextCompaction(db *sql.DB, c *models.ContextCompaction) error {
+	_, err := db.Exec(`
+		INSERT INTO context_compactions (
+			session_id, pre_tokens, post_tokens, trigger_reason, duration_ms, timestamp
+		) VALUES (?, ?, ?, ?, ?, ?)
+	`,
+		c.SessionID, c.PreTokens, c.PostTokens, c.TriggerReason, c.DurationMS,
+		c.Timestamp.UTC().Format(time.RFC3339),
+	)
+	if err != nil {
+		return fmt.Errorf("insert context compaction: %w", err)
+	}
+	return nil
+}
+
+// InsertSessionAttachment inserts a session attachment record.
+func InsertSessionAttachment(db *sql.DB, a *models.SessionAttachment) error {
+	_, err := db.Exec(`
+		INSERT INTO session_attachments (
+			session_id, attachment_type, content, timestamp
+		) VALUES (?, ?, ?, ?)
+	`,
+		a.SessionID, a.AttachmentType, a.Content,
+		a.Timestamp.UTC().Format(time.RFC3339),
+	)
+	if err != nil {
+		return fmt.Errorf("insert session attachment: %w", err)
+	}
+	return nil
+}
+
+// InsertSessionCommit inserts a git commit linked to a session. Duplicates (same hash) are ignored.
+func InsertSessionCommit(db *sql.DB, c *models.SessionCommit) error {
+	_, err := db.Exec(`
+		INSERT INTO session_commits (
+			session_id, commit_hash, commit_message, author,
+			files_changed, insertions, deletions, committed_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(commit_hash) DO NOTHING
+	`,
+		c.SessionID, c.CommitHash, c.CommitMessage, c.Author,
+		c.FilesChanged, c.Insertions, c.Deletions,
+		c.CommittedAt.UTC().Format(time.RFC3339),
+	)
+	if err != nil {
+		return fmt.Errorf("insert session commit: %w", err)
+	}
+	return nil
+}
+
+// UpdateSessionNotesTags updates the notes and tags for a session.
+func UpdateSessionNotesTags(db *sql.DB, sessionID, notes, tags string) error {
+	_, err := db.Exec(
+		"UPDATE sessions SET notes = ?, tags = ? WHERE id = ?",
+		notes, tags, sessionID,
+	)
+	if err != nil {
+		return fmt.Errorf("update session notes/tags: %w", err)
+	}
+	return nil
+}
+
+// InsertBudget inserts a new budget and returns its ID.
+func InsertBudget(db *sql.DB, b *models.Budget) (int64, error) {
+	result, err := db.Exec(`
+		INSERT INTO budgets (name, project_path, period, amount_usd, enabled)
+		VALUES (?, ?, ?, ?, ?)
+	`, b.Name, b.ProjectPath, b.Period, b.AmountUSD, b.Enabled)
+	if err != nil {
+		return 0, fmt.Errorf("insert budget: %w", err)
+	}
+	return result.LastInsertId()
+}
+
+// UpdateBudget updates an existing budget.
+func UpdateBudget(db *sql.DB, b *models.Budget) error {
+	_, err := db.Exec(`
+		UPDATE budgets SET name = ?, project_path = ?, period = ?, amount_usd = ?, enabled = ?
+		WHERE id = ?
+	`, b.Name, b.ProjectPath, b.Period, b.AmountUSD, b.Enabled, b.ID)
+	if err != nil {
+		return fmt.Errorf("update budget: %w", err)
+	}
+	return nil
+}
+
+// DeleteBudget deletes a budget by ID.
+func DeleteBudget(db *sql.DB, id int) error {
+	_, err := db.Exec("DELETE FROM budgets WHERE id = ?", id)
+	if err != nil {
+		return fmt.Errorf("delete budget: %w", err)
+	}
+	return nil
+}
+
+// UpdateToolCallResult updates tool_calls with result data (duration, success, stderr, stdout_preview).
+func UpdateToolCallResult(db *sql.DB, toolUseID string, durationMS int, success bool, stderr, stdoutPreview string) error {
+	_, err := db.Exec(`
+		UPDATE tool_calls SET duration_ms = ?, success = ?, stderr = ?, stdout_preview = ?
+		WHERE id = ?
+	`, durationMS, success, stderr, stdoutPreview, toolUseID)
+	if err != nil {
+		return fmt.Errorf("update tool call result: %w", err)
+	}
+	return nil
 }

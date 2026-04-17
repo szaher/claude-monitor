@@ -61,6 +61,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+	case "git-sync":
+		if err := cli.GitSync(args); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", os.Args[1])
 		printUsage()
@@ -79,6 +84,7 @@ Commands:
   config           Manage configuration
   status           Show daemon status, database stats
   export           Export sessions as JSON/CSV/HTML
+  git-sync         Sync git commits to sessions
   hook             Handle hook events (internal use)
   version          Print version info`)
 }
