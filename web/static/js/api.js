@@ -54,8 +54,8 @@ const API = {
     },
 
     /** Get aggregate stats. */
-    getStats() {
-        return API.get('/api/stats');
+    getStats(params) {
+        return API.get('/api/stats', params);
     },
 
     /** Get daily stats for the last N days. */

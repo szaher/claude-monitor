@@ -76,6 +76,9 @@ const DashboardPage = {
                     ${this._statCardPlaceholder('Cost Today', '--')}
                 </div>
 
+                <!-- Active Sessions Banner -->
+                <div id="active-sessions-banner"></div>
+
                 <!-- Activity Heatmap -->
                 <div class="card mt-2">
                     <div class="card-header"><h3>Activity</h3></div>
@@ -122,17 +125,19 @@ const DashboardPage = {
         this.charts = {};
 
         try {
+            const filters = App.getFilterParams();
             const [stats, daily, tools, projects, sessions, patterns, budgetStatus] = await Promise.all([
-                API.getStats(),
+                API.getStats(filters),
                 API.getDailyStats(365),
                 API.getToolStats(),
                 API.getProjectStats(),
-                API.getSessions({ limit: 10 }),
-                API.getPromptPatterns().catch(() => null),
+                API.getSessions({ limit: 10, ...filters }),
+                API.getPromptPatterns(filters).catch(() => null),
                 API.getBudgetStatus().catch(() => null),
             ]);
 
             this.renderStatCards(stats);
+            this.renderActiveSessionsBanner(stats);
             this.renderHeatmap((daily && daily.days) || []);
             this.renderTokenChart((daily && daily.days) || []);
             this.renderToolsChart((tools && tools.tools) || []);
@@ -155,13 +160,35 @@ const DashboardPage = {
         const el = document.getElementById('stats-cards');
         if (!el) return;
 
-        const today = (stats && stats.today) || {};
+        const period = (stats && stats.today) || {};
+        const label = (stats && stats.period_label === 'filtered') ? 'Filtered' : 'Today';
         el.innerHTML = [
-            this._statCardPlaceholder('Sessions Today', today.sessions != null ? today.sessions : 0),
-            this._statCardPlaceholder('Tool Calls Today', today.tool_calls != null ? today.tool_calls : 0),
-            this._statCardPlaceholder('Tokens Today', formatTokens(today.tokens || 0)),
-            this._statCardPlaceholder('Cost Today', formatCost(today.cost || 0)),
+            this._statCardPlaceholder('Sessions ' + label, period.sessions != null ? period.sessions : 0),
+            this._statCardPlaceholder('Tool Calls ' + label, period.tool_calls != null ? period.tool_calls : 0),
+            this._statCardPlaceholder('Tokens ' + label, formatTokens(period.tokens || 0)),
+            this._statCardPlaceholder('Cost ' + label, formatCost(period.cost || 0)),
         ].join('');
+    },
+
+    renderActiveSessionsBanner(stats) {
+        const el = document.getElementById('active-sessions-banner');
+        if (!el) return;
+
+        const count = (stats && stats.active_sessions) || 0;
+        if (count === 0) {
+            el.innerHTML = '';
+            return;
+        }
+
+        el.innerHTML = `
+            <div class="card mt-2" style="border-left:3px solid #2ea87a;background:var(--bg-secondary)">
+                <div class="card-body" style="display:flex;align-items:center;gap:0.75rem;padding:0.75rem 1rem">
+                    <span style="color:#2ea87a;font-size:1.2rem;animation:pulse-glow 2s ease-in-out infinite">&#9679;</span>
+                    <span><strong>${count}</strong> active session${count !== 1 ? 's' : ''} right now</span>
+                    <a href="#live" style="margin-left:auto;color:var(--accent-primary);font-weight:600;text-decoration:none">View Live &rarr;</a>
+                </div>
+            </div>
+        `;
     },
 
     /* ------------------------------------------------------------------
