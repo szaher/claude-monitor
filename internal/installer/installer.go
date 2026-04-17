@@ -9,12 +9,18 @@ import (
 	"path/filepath"
 )
 
-// hookEntry represents a single hook command entry in settings.json.
-type hookEntry struct {
-	Matcher string `json:"matcher"`
+// hookCommand represents a single hook command inside a matcher group.
+type hookCommand struct {
+	Type    string `json:"type"`
 	Command string `json:"command"`
 	Async   bool   `json:"async,omitempty"`
 	Timeout int    `json:"timeout"`
+}
+
+// hookEntry represents a matcher group containing one or more hook commands.
+type hookEntry struct {
+	Matcher string        `json:"matcher"`
+	Hooks   []hookCommand `json:"hooks"`
 }
 
 // InstallHooks reads ~/.claude/settings.json (creating it if it does not
@@ -44,28 +50,17 @@ func InstallHooks() error {
 	}
 
 	// 3. Build the hooks map.
+	monitorHook := hookCommand{Type: "command", Command: "claude-monitor hook", Async: true, Timeout: 1000}
+	monitorHookSync := hookCommand{Type: "command", Command: "claude-monitor hook", Async: false, Timeout: 2000}
+
 	hooks := map[string][]hookEntry{
-		"PreToolUse": {
-			{Matcher: "", Command: "claude-monitor hook", Async: true, Timeout: 1000},
-		},
-		"PostToolUse": {
-			{Matcher: "", Command: "claude-monitor hook", Async: true, Timeout: 1000},
-		},
-		"SessionStart": {
-			{Matcher: "", Command: "claude-monitor hook", Async: false, Timeout: 2000},
-		},
-		"SessionEnd": {
-			{Matcher: "", Command: "claude-monitor hook", Async: true, Timeout: 1000},
-		},
-		"SubagentStart": {
-			{Matcher: "", Command: "claude-monitor hook", Async: true, Timeout: 1000},
-		},
-		"SubagentStop": {
-			{Matcher: "", Command: "claude-monitor hook", Async: true, Timeout: 1000},
-		},
-		"Stop": {
-			{Matcher: "", Command: "claude-monitor hook", Async: true, Timeout: 1000},
-		},
+		"PreToolUse":    {{Matcher: "", Hooks: []hookCommand{monitorHook}}},
+		"PostToolUse":   {{Matcher: "", Hooks: []hookCommand{monitorHook}}},
+		"SessionStart":  {{Matcher: "", Hooks: []hookCommand{monitorHookSync}}},
+		"SessionEnd":    {{Matcher: "", Hooks: []hookCommand{monitorHook}}},
+		"SubagentStart": {{Matcher: "", Hooks: []hookCommand{monitorHook}}},
+		"SubagentStop":  {{Matcher: "", Hooks: []hookCommand{monitorHook}}},
+		"Stop":          {{Matcher: "", Hooks: []hookCommand{monitorHook}}},
 	}
 
 	// 4. Merge hooks into existing settings.
@@ -76,29 +71,29 @@ func InstallHooks() error {
 	}
 
 	for hookType, entries := range hooks {
-		// Convert our entries to []any so they merge cleanly into the
-		// generic JSON map.
 		var entryList []any
-		// Preserve existing entries for this hook type that are not ours.
 		if existing, ok := existingHooks[hookType]; ok {
 			if arr, ok := existing.([]any); ok {
 				for _, item := range arr {
-					if m, ok := item.(map[string]any); ok {
-						cmd, _ := m["command"].(string)
-						if cmd != "claude-monitor hook" {
-							entryList = append(entryList, item)
-						}
+					if !isMonitorHookEntry(item) {
+						entryList = append(entryList, item)
 					}
 				}
 			}
 		}
-		// Append our entries.
 		for _, e := range entries {
+			var hooksArr []any
+			for _, h := range e.Hooks {
+				hooksArr = append(hooksArr, map[string]any{
+					"type":    h.Type,
+					"command": h.Command,
+					"async":   h.Async,
+					"timeout": h.Timeout,
+				})
+			}
 			entryList = append(entryList, map[string]any{
 				"matcher": e.Matcher,
-				"command": e.Command,
-				"async":   e.Async,
-				"timeout": e.Timeout,
+				"hooks":   hooksArr,
 			})
 		}
 		existingHooks[hookType] = entryList
@@ -147,11 +142,8 @@ func UninstallHooks() error {
 				if arr, ok := entries.([]any); ok {
 					var filtered []any
 					for _, item := range arr {
-						if m, ok := item.(map[string]any); ok {
-							cmd, _ := m["command"].(string)
-							if cmd != "claude-monitor hook" {
-								filtered = append(filtered, item)
-							}
+						if !isMonitorHookEntry(item) {
+							filtered = append(filtered, item)
 						}
 					}
 					if len(filtered) > 0 {
@@ -168,6 +160,31 @@ func UninstallHooks() error {
 	}
 
 	return writeSettings(settingsPath, settings)
+}
+
+// isMonitorHookEntry checks whether a parsed JSON hook entry belongs to
+// claude-monitor. It handles both the correct format (matcher + hooks array)
+// and the legacy flat format (matcher + command at top level).
+func isMonitorHookEntry(item any) bool {
+	m, ok := item.(map[string]any)
+	if !ok {
+		return false
+	}
+	// Legacy flat format.
+	if cmd, ok := m["command"].(string); ok && cmd == "claude-monitor hook" {
+		return true
+	}
+	// Current nested format.
+	if hooksArr, ok := m["hooks"].([]any); ok {
+		for _, h := range hooksArr {
+			if hm, ok := h.(map[string]any); ok {
+				if cmd, _ := hm["command"].(string); cmd == "claude-monitor hook" {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // claudeSettingsDir returns the path to ~/.claude, creating it if needed.
