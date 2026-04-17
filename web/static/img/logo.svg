@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1b1f3b"/>
+      <stop offset="100%" stop-color="#2a2f54"/>
+    </linearGradient>
+    <linearGradient id="pulse" x1="60" y1="256" x2="452" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#5b6abf"/>
+      <stop offset="50%" stop-color="#2ea87a"/>
+      <stop offset="100%" stop-color="#5b6abf"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="96" y1="100" x2="416" y2="340" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#252a4a"/>
+      <stop offset="100%" stop-color="#1e2240"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+
+  <!-- Monitor frame -->
+  <rect x="72" y="80" width="368" height="272" rx="20" fill="#353a5e" stroke="#4a4f7a" stroke-width="3"/>
+
+  <!-- Screen -->
+  <rect x="88" y="96" width="336" height="240" rx="12" fill="url(#screen)"/>
+
+  <!-- Monitor stand -->
+  <path d="M216 352 h80 l16 48 h-112 z" fill="#353a5e"/>
+  <rect x="184" y="400" width="144" height="12" rx="6" fill="#4a4f7a"/>
+
+  <!-- Heartbeat/pulse line across screen -->
+  <polyline
+    points="104,228 148,228 168,228 188,228 208,228 218,180 232,280 248,160 264,296 278,192 290,228 320,228 340,228 380,228 408,228"
+    stroke="url(#pulse)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+  <!-- Bar chart elements (left side of screen) -->
+  <rect x="112" y="260" width="20" height="56" rx="4" fill="#5b6abf" opacity="0.6"/>
+  <rect x="140" y="240" width="20" height="76" rx="4" fill="#5b6abf" opacity="0.75"/>
+  <rect x="168" y="252" width="20" height="64" rx="4" fill="#5b6abf" opacity="0.6"/>
+  <rect x="196" y="270" width="20" height="46" rx="4" fill="#5b6abf" opacity="0.5"/>
+
+  <!-- Dot grid (right side of screen) -->
+  <circle cx="320" y="280" r="4" fill="#2ea87a" opacity="0.5"/>
+  <circle cx="340" y="272" r="4" fill="#2ea87a" opacity="0.7"/>
+  <circle cx="360" y="284" r="4" fill="#2ea87a" opacity="0.6"/>
+  <circle cx="380" y="268" r="4" fill="#2ea87a" opacity="0.8"/>
+  <circle cx="400" y="276" r="4" fill="#2ea87a" opacity="0.5"/>
+
+  <!-- Small status indicators on screen top -->
+  <circle cx="120" cy="116" r="5" fill="#2ea87a"/>
+  <circle cx="138" cy="116" r="5" fill="#e5a921"/>
+  <circle cx="156" cy="116" r="5" fill="#5b6abf"/>
+
+  <!-- "CM" text hint in top right of screen -->
+  <text x="392" y="124" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="700" fill="#5b6abf" text-anchor="end" opacity="0.7">CM</text>
+
+  <!-- Glow effect on pulse -->
+  <polyline
+    points="104,228 148,228 168,228 188,228 208,228 218,180 232,280 248,160 264,296 278,192 290,228 320,228 340,228 380,228 408,228"
+    stroke="#2ea87a" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.15"/>
+</svg>

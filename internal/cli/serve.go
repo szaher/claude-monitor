@@ -76,7 +76,7 @@ func Serve(args []string) error {
 
 	// Start pipeline (batch processor)
 	pipeline := ingestion.NewPipeline(database, hub.Broadcast, cfg.Cost.Models)
-	go pipeline.StartBatchProcessor(eventCh)
+	pipeline.StartBatchProcessor(eventCh)
 
 	// Start receiver (Unix socket)
 	socketPath := filepath.Join(baseDir, "monitor.sock")

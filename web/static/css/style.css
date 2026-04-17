@@ -193,6 +193,11 @@ h4 { font-size: 1rem; }
     flex-shrink: 0;
 }
 
+.sidebar-logo-img {
+    border-radius: var(--radius-md);
+    flex-shrink: 0;
+}
+
 .sidebar-title {
     color: var(--text-sidebar-active);
     font-weight: 600;

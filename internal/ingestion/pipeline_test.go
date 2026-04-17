@@ -424,7 +424,7 @@ func TestPipeline_BatchWrite(t *testing.T) {
 
 	eventCh := make(chan []byte, 100)
 
-	go p.StartBatchProcessor(eventCh)
+	p.StartBatchProcessor(eventCh)
 
 	// Send a SessionStart hook event through the batch processor
 	hookEvent := map[string]interface{}{

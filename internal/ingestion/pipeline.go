@@ -354,11 +354,15 @@ func (p *Pipeline) extractToolResults(entry *parser.LogEntry) {
 	}
 }
 
-// StartBatchProcessor reads from eventCh, buffers events, and flushes
-// them in batches (up to batchSize or after batchTime). It runs in a
-// goroutine and stops when Stop() is called.
+// StartBatchProcessor spawns a goroutine that reads from eventCh, buffers
+// events, and flushes them in batches (up to batchSize or after batchTime).
+// It stops when Stop() is called.
 func (p *Pipeline) StartBatchProcessor(eventCh <-chan []byte) {
 	p.wg.Add(1)
+	go p.runBatchProcessor(eventCh)
+}
+
+func (p *Pipeline) runBatchProcessor(eventCh <-chan []byte) {
 	defer p.wg.Done()
 
 	batch := make([][]byte, 0, p.batchSize)
