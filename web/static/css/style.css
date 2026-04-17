@@ -259,6 +259,32 @@ h4 { font-size: 1rem; }
     opacity: 1;
 }
 
+/* ---------- Live Session Indicator ---------- */
+.nav-link.has-active .nav-icon {
+    color: #2ea87a;
+    opacity: 1;
+    animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+.live-badge {
+    margin-left: auto;
+    background: #2ea87a;
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    min-width: 18px;
+    height: 18px;
+    line-height: 18px;
+    text-align: center;
+    border-radius: 9px;
+    padding: 0 5px;
+}
+
 /* ---------- Sidebar Toggle (mobile) ---------- */
 .sidebar-toggle {
     display: none;

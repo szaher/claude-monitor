@@ -1,0 +1,89 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            cc: gcc
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            cc: aarch64-linux-gnu-gcc
+          - os: macos-13
+            goos: darwin
+            goarch: amd64
+            cc: clang
+          - os: macos-14
+            goos: darwin
+            goarch: arm64
+            cc: clang
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install cross-compiler
+        if: matrix.goos == 'linux' && matrix.goarch == 'arm64'
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "1"
+          CC: ${{ matrix.cc }}
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          mkdir -p dist
+          go build -tags fts5 \
+            -ldflags "-s -w -X main.version=${VERSION}" \
+            -o dist/claude-monitor \
+            ./cmd/claude-monitor
+
+      - name: Package
+        run: |
+          cd dist
+          tar czf claude-monitor-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz claude-monitor
+          sha256sum claude-monitor-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz > claude-monitor-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: claude-monitor-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*.tar.gz*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "Claude Monitor $GITHUB_REF_NAME" \
+            --generate-notes \
+            artifacts/*

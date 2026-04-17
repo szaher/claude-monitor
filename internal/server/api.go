@@ -265,24 +265,76 @@ func (s *Server) handleSubagents(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleStats handles GET /api/stats — dashboard aggregate stats.
+// Supports optional query params: project, from, to.
+// When filters are set, "filtered" stats replace "today" stats.
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	today := time.Now().UTC().Format("2006-01-02")
+	project := r.URL.Query().Get("project")
+	from := r.URL.Query().Get("from")
+	to := r.URL.Query().Get("to")
 
-	// Today's stats
-	var todaySessions, todayToolCalls, todayTokens int
-	var todayCost float64
+	hasFilter := project != "" || from != "" || to != ""
 
-	s.db.QueryRow(`SELECT COUNT(*) FROM sessions WHERE date(started_at) = ?`, today).Scan(&todaySessions)
-	s.db.QueryRow(`SELECT COUNT(*) FROM tool_calls WHERE date(timestamp) = ?`, today).Scan(&todayToolCalls)
-	s.db.QueryRow(`SELECT COALESCE(SUM(total_input_tokens + total_output_tokens), 0) FROM sessions WHERE date(started_at) = ?`, today).Scan(&todayTokens)
-	s.db.QueryRow(`SELECT COALESCE(SUM(estimated_cost_usd), 0) FROM sessions WHERE date(started_at) = ?`, today).Scan(&todayCost)
+	// Build dynamic WHERE clauses for sessions and tool_calls
+	sessWhere := "1=1"
+	tcWhere := "1=1"
+	var sessArgs, tcArgs []interface{}
 
-	// Total stats
+	if project != "" {
+		sessWhere += " AND project_path = ?"
+		sessArgs = append(sessArgs, project)
+		tcWhere += " AND session_id IN (SELECT id FROM sessions WHERE project_path = ?)"
+		tcArgs = append(tcArgs, project)
+	}
+	if from != "" {
+		sessWhere += " AND started_at >= ?"
+		sessArgs = append(sessArgs, from)
+		tcWhere += " AND timestamp >= ?"
+		tcArgs = append(tcArgs, from)
+	}
+	if to != "" {
+		sessWhere += " AND started_at <= ?"
+		sessArgs = append(sessArgs, to)
+		tcWhere += " AND timestamp <= ?"
+		tcArgs = append(tcArgs, to)
+	}
+
+	// Period stats — either filtered range or today
+	var periodSessions, periodToolCalls, periodTokens int
+	var periodCost float64
+	periodLabel := "today"
+
+	if hasFilter {
+		periodLabel = "filtered"
+		s.db.QueryRow(fmt.Sprintf(`SELECT COUNT(*) FROM sessions WHERE %s`, sessWhere), sessArgs...).Scan(&periodSessions)
+		s.db.QueryRow(fmt.Sprintf(`SELECT COUNT(*) FROM tool_calls WHERE %s`, tcWhere), tcArgs...).Scan(&periodToolCalls)
+		s.db.QueryRow(fmt.Sprintf(`SELECT COALESCE(SUM(total_input_tokens + total_output_tokens), 0) FROM sessions WHERE %s`, sessWhere), sessArgs...).Scan(&periodTokens)
+		s.db.QueryRow(fmt.Sprintf(`SELECT COALESCE(SUM(estimated_cost_usd), 0) FROM sessions WHERE %s`, sessWhere), sessArgs...).Scan(&periodCost)
+	} else {
+		today := time.Now().UTC().Format("2006-01-02")
+		s.db.QueryRow(`
+			SELECT COUNT(*) FROM (
+				SELECT id FROM sessions WHERE date(started_at) = ?
+				UNION
+				SELECT DISTINCT session_id FROM tool_calls WHERE date(timestamp) = ?
+			)`, today, today).Scan(&periodSessions)
+		s.db.QueryRow(`SELECT COUNT(*) FROM tool_calls WHERE date(timestamp) = ?`, today).Scan(&periodToolCalls)
+		s.db.QueryRow(`SELECT COALESCE(SUM(total_input_tokens + total_output_tokens), 0) FROM sessions WHERE date(started_at) = ?`, today).Scan(&periodTokens)
+		s.db.QueryRow(`SELECT COALESCE(SUM(estimated_cost_usd), 0) FROM sessions WHERE date(started_at) = ?`, today).Scan(&periodCost)
+	}
+
+	// Active sessions
+	var activeSessions int
+	s.db.QueryRow(`
+		SELECT COUNT(DISTINCT session_id) FROM tool_calls
+		WHERE timestamp >= datetime('now', '-15 minutes')
+	`).Scan(&activeSessions)
+
+	// Total stats (always unfiltered)
 	var totalSessions, totalToolCalls, totalTokens int
 	var totalCost float64
 
@@ -292,11 +344,12 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	s.db.QueryRow(`SELECT COALESCE(SUM(estimated_cost_usd), 0) FROM sessions`).Scan(&totalCost)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"period_label": periodLabel,
 		"today": map[string]interface{}{
-			"sessions":   todaySessions,
-			"tool_calls": todayToolCalls,
-			"tokens":     todayTokens,
-			"cost":       todayCost,
+			"sessions":   periodSessions,
+			"tool_calls": periodToolCalls,
+			"tokens":     periodTokens,
+			"cost":       periodCost,
 		},
 		"total": map[string]interface{}{
 			"sessions":   totalSessions,
@@ -304,6 +357,7 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 			"tokens":     totalTokens,
 			"cost":       totalCost,
 		},
+		"active_sessions": activeSessions,
 	})
 }
 

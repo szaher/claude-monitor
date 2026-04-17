@@ -33,6 +33,7 @@ const App = {
         this.setupSidebarToggle();
         this.navigate(window.location.hash.slice(1) || 'dashboard');
         this.populateFilterDropdowns();
+        this.startActiveSessionPoller();
     },
 
     /* ------------------------------------------------------------------
@@ -274,6 +275,43 @@ const App = {
             window.location.href = '/api/export?' + params.toString();
             overlay.remove();
         });
+    },
+
+    /* ------------------------------------------------------------------
+       Active Session Indicator
+    ------------------------------------------------------------------ */
+    _activePoller: null,
+
+    startActiveSessionPoller() {
+        this.updateActiveIndicator();
+        this._activePoller = setInterval(() => this.updateActiveIndicator(), 30000);
+    },
+
+    async updateActiveIndicator() {
+        try {
+            const stats = await API.getStats();
+            const count = (stats && stats.active_sessions) || 0;
+            this.renderActiveIndicator(count);
+        } catch (_) { /* ignore */ }
+    },
+
+    renderActiveIndicator(count) {
+        const liveLink = document.querySelector('.nav-link[data-page="live"]');
+        if (!liveLink) return;
+
+        let badge = liveLink.querySelector('.live-badge');
+        if (count > 0) {
+            if (!badge) {
+                badge = document.createElement('span');
+                badge.className = 'live-badge';
+                liveLink.appendChild(badge);
+            }
+            badge.textContent = count;
+            liveLink.classList.add('has-active');
+        } else {
+            if (badge) badge.remove();
+            liveLink.classList.remove('has-active');
+        }
     },
 
     /* ------------------------------------------------------------------

@@ -161,7 +161,7 @@ const LivePage = {
     },
 
     formatEvent(event) {
-        const eventName = event.hook_event_name || event.event || 'unknown';
+        const eventName = event.hook_event_name || event.event || event.type || 'unknown';
         const sessionID = event.session_id || '';
         const shortSession = sessionID ? sessionID.slice(0, 8) : '';
         const ts = this._formatTime(event.timestamp || new Date().toISOString());
@@ -229,9 +229,36 @@ const LivePage = {
                 break;
             }
 
-            default:
-                detail = `Event: <strong>${this._esc(eventName)}</strong>`;
+            case 'Notification': {
+                const title = event.title || '';
+                const msg = event.message || '';
+                detail = `Notification: <strong>${this._esc(title || msg)}</strong>`;
+                if (title && msg) {
+                    detail += ` &mdash; <span class="text-muted">${this._esc(this._truncate(msg, 80))}</span>`;
+                }
                 break;
+            }
+
+            case 'TaskStart':
+            case 'TaskComplete':
+            case 'TaskUpdate': {
+                const taskDesc = event.description || event.task || '';
+                const verb = eventName === 'TaskStart' ? 'started' : eventName === 'TaskComplete' ? 'completed' : 'updated';
+                detail = `Task ${verb}`;
+                if (taskDesc) {
+                    detail += `: <strong>${this._esc(this._truncate(taskDesc, 80))}</strong>`;
+                }
+                break;
+            }
+
+            default: {
+                detail = `<strong>${this._esc(eventName)}</strong>`;
+                const summary = this._extractEventSummary(event);
+                if (summary) {
+                    detail += ` &mdash; <span class="text-muted">${this._esc(summary)}</span>`;
+                }
+                break;
+            }
         }
 
         return `
@@ -244,12 +271,23 @@ const LivePage = {
         `;
     },
 
+    _extractEventSummary(event) {
+        for (const key of ['message', 'description', 'title', 'tool_name', 'reason', 'cwd', 'text']) {
+            if (event[key] && typeof event[key] === 'string') {
+                return this._truncate(event[key], 80);
+            }
+        }
+        return '';
+    },
+
     getEventType(event) {
-        const name = event.hook_event_name || event.event || '';
+        const name = event.hook_event_name || event.event || event.type || '';
         if (name.startsWith('Session') || name === 'Stop') return 'session';
         if (name.includes('Tool')) return 'tool';
         if (name.includes('agent') || name.includes('Agent')) return 'agent';
+        if (name.includes('Task')) return 'task';
         if (name.includes('Error') || name.includes('error')) return 'error';
+        if (name === 'Notification') return 'notification';
         return 'default';
     },
 
@@ -265,6 +303,12 @@ const LivePage = {
             case 'SubagentStart':
             case 'SubagentStop':
                 return 'warning';
+            case 'Notification':
+                return 'info';
+            case 'TaskStart':
+            case 'TaskComplete':
+            case 'TaskUpdate':
+                return 'primary';
             default:
                 return 'neutral';
         }
@@ -279,6 +323,10 @@ const LivePage = {
             case 'PostToolUse': return 'TOOL';
             case 'SubagentStart': return 'AGENT';
             case 'SubagentStop': return 'AGENT';
+            case 'Notification': return 'NOTIFY';
+            case 'TaskStart': return 'TASK';
+            case 'TaskComplete': return 'TASK';
+            case 'TaskUpdate': return 'TASK';
             default: return eventName.slice(0, 8).toUpperCase();
         }
     },
