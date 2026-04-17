@@ -9,10 +9,8 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"syscall"
 	"time"
 
@@ -28,6 +26,7 @@ func Serve(args []string) error {
 	port := fs.Int("port", 0, "HTTP port (overrides config)")
 	host := fs.String("host", "", "HTTP host (overrides config)")
 	noBrowser := fs.Bool("no-browser", false, "Don't open browser on start")
+	noTray := fs.Bool("no-tray", false, "Don't show system tray icon")
 	_ = fs.Bool("daemon", false, "Run as background daemon (not yet implemented)")
 
 	if err := fs.Parse(args); err != nil {
@@ -116,38 +115,69 @@ func Serve(args []string) error {
 		Handler: srv.Handler(),
 	}
 
+	// Shutdown helper
+	triggerShutdown := func() {
+		log.Println("Shutting down...")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		httpServer.Shutdown(ctx)
+	}
+
 	// Open browser
 	if !*noBrowser {
 		go func() {
-			// Wait a moment for the server to start
 			time.Sleep(500 * time.Millisecond)
 			url := fmt.Sprintf("http://%s", addr)
 			if cfg.Server.Host == "0.0.0.0" || cfg.Server.Host == "" {
 				url = fmt.Sprintf("http://127.0.0.1:%d", cfg.Server.Port)
 			}
-			openBrowser(url)
+			openInBrowser(url)
 		}()
 	}
 
-	// Wait for SIGINT/SIGTERM
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-
-	go func() {
-		<-sigCh
-		log.Println("Shutting down...")
-
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		httpServer.Shutdown(ctx)
-	}()
 
 	log.Printf("Claude Monitor starting on %s", addr)
 	log.Printf("Database: %s", dbPath)
 
-	if err := httpServer.ListenAndServe(); err != http.ErrServerClosed {
-		return fmt.Errorf("http server: %w", err)
+	if !*noTray {
+		tray := newTrayApp(addr, triggerShutdown)
+
+		go func() {
+			<-sigCh
+			triggerShutdown()
+			tray.stop()
+		}()
+
+		go func() {
+			if err := httpServer.ListenAndServe(); err != http.ErrServerClosed {
+				log.Fatalf("http server: %v", err)
+			}
+		}()
+
+		go func() {
+			for {
+				time.Sleep(30 * time.Second)
+				var count int
+				database.QueryRow(`
+					SELECT COUNT(DISTINCT session_id) FROM tool_calls
+					WHERE timestamp >= datetime('now', '-15 minutes')
+				`).Scan(&count)
+				tray.updateActiveSessions(count)
+			}
+		}()
+
+		tray.run()
+	} else {
+		go func() {
+			<-sigCh
+			triggerShutdown()
+		}()
+
+		if err := httpServer.ListenAndServe(); err != http.ErrServerClosed {
+			return fmt.Errorf("http server: %w", err)
+		}
 	}
 
 	// Graceful shutdown: stop watcher bridge, then pipeline
@@ -214,18 +244,3 @@ func startWatcherBridge(logEventCh <-chan *ingestion.LogFileEvent, eventCh chan<
 	}
 }
 
-// openBrowser opens the given URL in the user's default browser.
-func openBrowser(url string) {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", url)
-	case "linux":
-		cmd = exec.Command("xdg-open", url)
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-	default:
-		return
-	}
-	cmd.Start()
-}

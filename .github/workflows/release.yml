@@ -60,7 +60,7 @@ jobs:
         run: |
           cd dist
           tar czf claude-monitor-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz claude-monitor
-          sha256sum claude-monitor-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz > claude-monitor-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz.sha256
+          shasum -a 256 claude-monitor-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz > claude-monitor-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz.sha256
 
       - uses: actions/upload-artifact@v4
         with:
