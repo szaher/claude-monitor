@@ -3,6 +3,10 @@ layout: default
 title: Home
 ---
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/szaher/claude-monitor/main/web/static/img/logo.svg" alt="Claude Monitor" width="128" height="128">
+</p>
+
 # Claude Monitor
 
 A monitoring and visualization tool for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) sessions. Track token usage, costs, tool calls, and session activity through a real-time web dashboard.

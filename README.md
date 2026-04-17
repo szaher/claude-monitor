@@ -1,6 +1,13 @@
-# Claude Monitor
+<p align="center">
+  <img src="web/static/img/logo.svg" alt="Claude Monitor" width="128" height="128">
+</p>
 
-A comprehensive monitoring and visualization tool for Claude Code sessions. Track token usage, costs, tool calls, and session activity through a real-time web dashboard.
+<h1 align="center">Claude Monitor</h1>
+
+<p align="center">
+  A comprehensive monitoring and visualization tool for Claude Code sessions.<br>
+  Track token usage, costs, tool calls, and session activity through a real-time web dashboard.
+</p>
 
 ## Features
 
