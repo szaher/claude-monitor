@@ -2,12 +2,17 @@ title: Claude Monitor
 description: Monitor and visualize all your Claude Code sessions
 baseurl: "/claude-monitor"
 url: "https://szaher.github.io"
-remote_theme: pages-themes/minimal@v0.2.0
+remote_theme: just-the-docs/just-the-docs@v0.10.1
 plugins:
   - jekyll-remote-theme
 
+color_scheme: dark
+
 exclude:
   - superpowers
+
+aux_links:
+  GitHub: https://github.com/szaher/claude-monitor
 
 defaults:
   - scope:

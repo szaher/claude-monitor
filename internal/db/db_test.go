@@ -87,7 +87,7 @@ func TestInsertSession(t *testing.T) {
 	}
 }
 
-func TestInsertSession_UpsertUpdatesTokens(t *testing.T) {
+func TestInsertSession_UpsertPreservesTokens(t *testing.T) {
 	db := setupTestDB(t)
 
 	now := time.Now().UTC().Truncate(time.Second)
@@ -103,15 +103,48 @@ func TestInsertSession_UpsertUpdatesTokens(t *testing.T) {
 	}
 
 	ended := now.Add(5 * time.Minute)
-	s.EndedAt = &ended
-	s.TotalInputTokens = 500
-	s.TotalOutputTokens = 200
-	s.EstimatedCostUSD = 0.05
-	if err := InsertSession(db, s); err != nil {
+	s2 := &models.Session{
+		ID:          "sess-upsert",
+		ProjectPath: "/home/user/proj",
+		ProjectName: "proj",
+		StartedAt:   now,
+		EndedAt:     &ended,
+	}
+	if err := InsertSession(db, s2); err != nil {
 		t.Fatalf("upsert failed: %v", err)
 	}
 
 	got, err := GetSessionByID(db, "sess-upsert")
+	if err != nil {
+		t.Fatalf("GetSessionByID failed: %v", err)
+	}
+	if got.TotalInputTokens != 100 {
+		t.Errorf("expected input tokens preserved at 100, got %d", got.TotalInputTokens)
+	}
+	if got.EndedAt == nil {
+		t.Error("expected ended_at to be set after upsert")
+	}
+}
+
+func TestUpdateSessionTokens(t *testing.T) {
+	db := setupTestDB(t)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	s := &models.Session{
+		ID:          "sess-tokens",
+		ProjectPath: "/home/user/proj",
+		ProjectName: "proj",
+		StartedAt:   now,
+	}
+	if err := InsertSession(db, s); err != nil {
+		t.Fatalf("insert failed: %v", err)
+	}
+
+	if err := UpdateSessionTokens(db, "sess-tokens", 500, 200, 50, 10, 0.05); err != nil {
+		t.Fatalf("UpdateSessionTokens failed: %v", err)
+	}
+
+	got, err := GetSessionByID(db, "sess-tokens")
 	if err != nil {
 		t.Fatalf("GetSessionByID failed: %v", err)
 	}
@@ -123,9 +156,6 @@ func TestInsertSession_UpsertUpdatesTokens(t *testing.T) {
 	}
 	if got.EstimatedCostUSD != 0.05 {
 		t.Errorf("expected cost 0.05, got %f", got.EstimatedCostUSD)
-	}
-	if got.EndedAt == nil {
-		t.Error("expected ended_at to be set after upsert")
 	}
 }
 

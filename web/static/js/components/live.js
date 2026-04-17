@@ -9,6 +9,7 @@ const LivePage = {
     maxEvents: 500,
     reconnectTimer: null,
     reconnectDelay: 3000,
+    activeSessionsTimer: null,
 
     render(container) {
         // Clean up any existing connection before re-rendering
@@ -24,12 +25,15 @@ const LivePage = {
                         <button id="live-clear" class="btn btn-secondary btn-sm">Clear</button>
                     </div>
                 </div>
+                <div id="live-active-sessions"></div>
                 <div id="live-events" class="live-events"></div>
             </div>
         `;
 
         this.setupControls();
         this.connect();
+        this.loadActiveSessions();
+        this.activeSessionsTimer = setInterval(() => this.loadActiveSessions(), 15000);
     },
 
     /* ------------------------------------------------------------------
@@ -93,6 +97,75 @@ const LivePage = {
             badge.className = 'badge badge-danger';
             badge.textContent = 'Disconnected';
         }
+    },
+
+    /* ------------------------------------------------------------------
+       Active Sessions
+    ------------------------------------------------------------------ */
+    async loadActiveSessions() {
+        const container = document.getElementById('live-active-sessions');
+        if (!container) return;
+
+        try {
+            const data = await API.getActiveSessions();
+            const sessions = (data && data.sessions) || [];
+            if (sessions.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="card mb-2" style="border-left: 3px solid var(--accent-success);">
+                    <div class="card-header">
+                        <h3 style="margin:0;display:flex;align-items:center;gap:0.5rem;">
+                            <span style="color:var(--accent-success);animation:pulse-glow 2s ease-in-out infinite">&#9679;</span>
+                            ${sessions.length} Active Session${sessions.length !== 1 ? 's' : ''}
+                        </h3>
+                    </div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Session</th>
+                                    <th>Project</th>
+                                    <th>Started</th>
+                                    <th>Last Activity</th>
+                                    <th class="text-right">Tool Calls (15m)</th>
+                                    <th class="text-right">Tokens</th>
+                                    <th class="text-right">Cost</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${sessions.map(s => {
+                                    const totalTokens = (s.total_input_tokens || 0) + (s.total_output_tokens || 0);
+                                    return `
+                                        <tr class="cursor-pointer" onclick="window.location.hash='sessions'">
+                                            <td class="font-mono text-sm">${this._esc((s.id || '').slice(0, 8))}</td>
+                                            <td title="${this._esc(s.project_path || '')}">${this._esc(s.project_name || '-')}</td>
+                                            <td style="white-space:nowrap">${this._formatTime(s.started_at)}</td>
+                                            <td style="white-space:nowrap">${this._formatTime(s.last_activity)}</td>
+                                            <td class="text-right">${s.recent_tool_calls || 0}</td>
+                                            <td class="text-right">${this._formatCompact(totalTokens)}</td>
+                                            <td class="text-right">$${(s.estimated_cost_usd || 0).toFixed(2)}</td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        } catch (err) {
+            console.warn('Failed to load active sessions:', err);
+        }
+    },
+
+    _formatCompact(n) {
+        if (n == null || isNaN(n)) return '0';
+        n = Number(n);
+        if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
+        if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
+        return String(n);
     },
 
     /* ------------------------------------------------------------------
@@ -338,6 +411,10 @@ const LivePage = {
         if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer);
             this.reconnectTimer = null;
+        }
+        if (this.activeSessionsTimer) {
+            clearInterval(this.activeSessionsTimer);
+            this.activeSessionsTimer = null;
         }
         if (this.ws) {
             try { this.ws.close(); } catch (_) { /* noop */ }

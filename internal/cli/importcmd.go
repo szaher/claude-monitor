@@ -282,15 +282,10 @@ func Import(args []string) error {
 		}
 
 		// Update session with accumulated token totals and cost
-		session.TotalInputTokens = sessionInputTokens
-		session.TotalOutputTokens = sessionOutputTokens
-		session.TotalCacheReadTokens = sessionCacheRead
-		session.TotalCacheWriteTokens = sessionCacheWrite
-		session.EstimatedCostUSD = sessionCost
-
-		// Re-insert to update token counts and cost (upsert)
-		if err := db.InsertSession(database, session); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: update session %s: %v\n", session.ID, err)
+		if err := db.UpdateSessionTokens(database, effectiveSessionID,
+			sessionInputTokens, sessionOutputTokens,
+			sessionCacheRead, sessionCacheWrite, sessionCost); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: update session tokens %s: %v\n", effectiveSessionID, err)
 		}
 
 		totalSessions++

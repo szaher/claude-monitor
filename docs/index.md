@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Home
+nav_order: 1
 ---
 
 <p align="center">
@@ -12,6 +13,10 @@ title: Home
 A monitoring and visualization tool for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) sessions. Track token usage, costs, tool calls, and session activity through a real-time web dashboard.
 
 Claude Monitor installs as a Claude Code hook, capturing every session, message, and tool call into a local SQLite database. A built-in web UI provides dashboards, analytics, and live activity monitoring.
+
+<p align="center">
+  <img src="images/demo.gif" alt="Claude Monitor Demo" width="900">
+</p>
 
 ---
 
@@ -59,13 +64,11 @@ Or download a pre-built binary from [GitHub Releases](https://github.com/szaher/
 
 ---
 
-## Pages
+## Documentation
 
-| Page | Description |
-|------|-------------|
-| [Installation](installation) | Build, install, and configure |
-| [Commands](commands) | CLI reference for all commands |
-| [Dashboard](dashboard) | Overview of the web UI pages |
-| [API Reference](api) | REST API and WebSocket documentation |
-| [Configuration](configuration) | Config file reference |
-| [Architecture](architecture) | How it works under the hood |
+- [Installation](installation) -- Build, install, and configure
+- [Commands](commands) -- CLI reference for all commands
+- [Dashboard & UI](dashboard) -- Overview of the web UI pages
+- [API Reference](api) -- REST API and WebSocket documentation
+- [Configuration](configuration) -- Config file reference
+- [Architecture](architecture) -- How it works under the hood

@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Installation
+nav_order: 2
 ---
 
 # Installation
@@ -85,5 +86,3 @@ claude-monitor uninstall
 # Remove hooks and delete all data
 claude-monitor uninstall --delete-data
 ```
-
-[Back to Home](.)

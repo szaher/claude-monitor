@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Commands
+nav_order: 3
 ---
 
 # CLI Commands
@@ -121,5 +122,3 @@ Print version information.
 ```sh
 claude-monitor version
 ```
-
-[Back to Home](.)

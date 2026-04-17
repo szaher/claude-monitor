@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Configuration
+nav_order: 6
 ---
 
 # Configuration
@@ -84,5 +85,3 @@ claude-monitor config --reset
 # Edit manually
 $EDITOR ~/.claude-monitor/config.yaml
 ```
-
-[Back to Home](.)

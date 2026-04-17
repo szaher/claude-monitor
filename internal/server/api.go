@@ -316,15 +316,19 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		s.db.QueryRow(fmt.Sprintf(`SELECT COALESCE(SUM(estimated_cost_usd), 0) FROM sessions WHERE %s`, sessWhere), sessArgs...).Scan(&periodCost)
 	} else {
 		today := time.Now().UTC().Format("2006-01-02")
-		s.db.QueryRow(`
-			SELECT COUNT(*) FROM (
-				SELECT id FROM sessions WHERE date(started_at) = ?
-				UNION
-				SELECT DISTINCT session_id FROM tool_calls WHERE date(timestamp) = ?
-			)`, today, today).Scan(&periodSessions)
+		todaySessionsSubquery := `
+			SELECT id FROM sessions WHERE date(started_at) = ?
+			UNION
+			SELECT DISTINCT session_id FROM tool_calls WHERE date(timestamp) = ?`
+		s.db.QueryRow(fmt.Sprintf(
+			`SELECT COUNT(*) FROM (%s)`, todaySessionsSubquery), today, today).Scan(&periodSessions)
 		s.db.QueryRow(`SELECT COUNT(*) FROM tool_calls WHERE date(timestamp) = ?`, today).Scan(&periodToolCalls)
-		s.db.QueryRow(`SELECT COALESCE(SUM(total_input_tokens + total_output_tokens), 0) FROM sessions WHERE date(started_at) = ?`, today).Scan(&periodTokens)
-		s.db.QueryRow(`SELECT COALESCE(SUM(estimated_cost_usd), 0) FROM sessions WHERE date(started_at) = ?`, today).Scan(&periodCost)
+		s.db.QueryRow(fmt.Sprintf(
+			`SELECT COALESCE(SUM(total_input_tokens + total_output_tokens), 0) FROM sessions WHERE id IN (%s)`,
+			todaySessionsSubquery), today, today).Scan(&periodTokens)
+		s.db.QueryRow(fmt.Sprintf(
+			`SELECT COALESCE(SUM(estimated_cost_usd), 0) FROM sessions WHERE id IN (%s)`,
+			todaySessionsSubquery), today, today).Scan(&periodCost)
 	}
 
 	// Active sessions
@@ -358,6 +362,80 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 			"cost":       totalCost,
 		},
 		"active_sessions": activeSessions,
+	})
+}
+
+// handleActiveSessions handles GET /api/stats/active-sessions — returns sessions
+// with tool call activity in the last 15 minutes.
+func (s *Server) handleActiveSessions(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	rows, err := s.db.Query(`
+		SELECT s.id, s.project_path, s.project_name, s.cwd, s.git_branch,
+			s.started_at, s.ended_at, s.claude_version, s.entry_point, s.permission_mode,
+			s.total_input_tokens, s.total_output_tokens, s.total_cache_read_tokens,
+			s.total_cache_write_tokens, s.estimated_cost_usd,
+			COALESCE(s.notes,'') as notes, COALESCE(s.tags,'') as tags,
+			MAX(tc.timestamp) as last_activity,
+			COUNT(tc.id) as recent_tool_calls
+		FROM sessions s
+		JOIN tool_calls tc ON tc.session_id = s.id
+		WHERE tc.timestamp >= datetime('now', '-15 minutes')
+		GROUP BY s.id
+		ORDER BY last_activity DESC
+	`)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "query active sessions: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	sessions := []map[string]interface{}{}
+	for rows.Next() {
+		var id, projectPath, projectName, startedAt string
+		var cwd, gitBranch, claudeVersion, entryPoint, permissionMode sql.NullString
+		var endedAt sql.NullString
+		var inputTokens, outputTokens, cacheRead, cacheWrite int
+		var cost float64
+		var notes, tags string
+		var lastActivity string
+		var recentToolCalls int
+
+		if err := rows.Scan(
+			&id, &projectPath, &projectName, &cwd, &gitBranch,
+			&startedAt, &endedAt, &claudeVersion, &entryPoint, &permissionMode,
+			&inputTokens, &outputTokens, &cacheRead, &cacheWrite, &cost,
+			&notes, &tags, &lastActivity, &recentToolCalls,
+		); err != nil {
+			writeError(w, http.StatusInternalServerError, "scan active session: "+err.Error())
+			return
+		}
+
+		sess := map[string]interface{}{
+			"id":                   id,
+			"project_path":         projectPath,
+			"project_name":         projectName,
+			"cwd":                  cwd.String,
+			"git_branch":           gitBranch.String,
+			"started_at":           startedAt,
+			"claude_version":       claudeVersion.String,
+			"total_input_tokens":   inputTokens,
+			"total_output_tokens":  outputTokens,
+			"estimated_cost_usd":   cost,
+			"last_activity":        lastActivity,
+			"recent_tool_calls":    recentToolCalls,
+		}
+		if endedAt.Valid {
+			sess["ended_at"] = endedAt.String
+		}
+		sessions = append(sessions, sess)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"sessions": sessions,
 	})
 }
 

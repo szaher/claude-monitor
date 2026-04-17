@@ -31,6 +31,7 @@ const App = {
         this.setupRouter();
         this.setupFilters();
         this.setupSidebarToggle();
+        this.setupThemeToggle();
         this.navigate(window.location.hash.slice(1) || 'dashboard');
         this.populateFilterDropdowns();
         this.startActiveSessionPoller();
@@ -236,6 +237,48 @@ const App = {
             exportBtn.addEventListener('click', () => App.showExportModal());
             header.appendChild(exportBtn);
         }
+    },
+
+    /* ------------------------------------------------------------------
+       Theme Toggle
+    ------------------------------------------------------------------ */
+    _themeCycle: ['auto', 'light', 'dark'],
+    _themeLabels: { auto: 'Theme: auto', light: 'Theme: light', dark: 'Theme: dark' },
+
+    setupThemeToggle() {
+        const btn = document.getElementById('theme-toggle');
+        if (!btn) return;
+
+        btn.addEventListener('click', () => {
+            const current = document.documentElement.getAttribute('data-theme') || 'auto';
+            const idx = this._themeCycle.indexOf(current);
+            const next = this._themeCycle[(idx + 1) % this._themeCycle.length];
+            this.applyTheme(next);
+            this.saveThemePreference(next);
+        });
+
+        API.getConfig().then(cfg => {
+            const saved = cfg && cfg.ui && cfg.ui.theme;
+            if (saved && this._themeCycle.includes(saved)) {
+                this.applyTheme(saved);
+            }
+        }).catch(() => {});
+    },
+
+    applyTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+        const btn = document.getElementById('theme-toggle');
+        if (btn) btn.title = this._themeLabels[theme] || theme;
+        const settingsSelect = document.getElementById('setting-ui.theme');
+        if (settingsSelect) settingsSelect.value = theme;
+    },
+
+    saveThemePreference(theme) {
+        API.getConfig().then(cfg => {
+            if (!cfg.ui) cfg.ui = {};
+            cfg.ui.theme = theme;
+            return API.saveConfig(cfg);
+        }).catch(() => {});
     },
 
     /* ------------------------------------------------------------------

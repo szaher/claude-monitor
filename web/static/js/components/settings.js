@@ -240,8 +240,7 @@ const SettingsPage = {
         if (!themeSelect) return;
 
         themeSelect.addEventListener('change', () => {
-            const theme = themeSelect.value;
-            document.documentElement.setAttribute('data-theme', theme);
+            App.applyTheme(themeSelect.value);
         });
     },
 

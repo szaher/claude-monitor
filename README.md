@@ -9,6 +9,11 @@
   Track token usage, costs, tool calls, and session activity through a real-time web dashboard.
 </p>
 
+<p align="center">
+  <img src="docs/images/demo.gif" alt="Claude Monitor Demo" width="900">
+</p>
+
+
 ## Features
 
 - **Real-time monitoring** -- WebSocket-powered live view of active Claude Code sessions

@@ -375,6 +375,34 @@ h4 { font-size: 1rem; }
     min-width: 220px;
 }
 
+/* ---------- Theme Toggle ---------- */
+.theme-toggle {
+    margin-left: auto;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-input);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.theme-toggle:hover {
+    color: var(--text-primary);
+    border-color: var(--border-focus);
+    background: var(--bg-secondary);
+}
+
+.theme-icon { display: none; }
+[data-theme="auto"] .theme-icon-auto { display: block; }
+[data-theme="light"] .theme-icon-light { display: block; }
+[data-theme="dark"] .theme-icon-dark { display: block; }
+
 /* ---------- Main Content ---------- */
 .main-content {
     flex: 1;

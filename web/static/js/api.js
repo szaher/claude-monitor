@@ -108,6 +108,11 @@ const API = {
         return API.get('/api/stats/file-heatmap', { project });
     },
 
+    /** Get active sessions (activity in last 15 minutes). */
+    getActiveSessions() {
+        return API.get('/api/stats/active-sessions');
+    },
+
     /** Get current config. */
     getConfig() {
         return API.get('/api/config');

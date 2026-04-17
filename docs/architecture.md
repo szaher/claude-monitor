@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Architecture
+nav_order: 7
 ---
 
 # Architecture
@@ -110,5 +111,3 @@ A vanilla JavaScript single-page application using Chart.js for charts. The stat
 ```sh
 CGO_ENABLED=1 go build -tags fts5 -o claude-monitor ./cmd/claude-monitor
 ```
-
-[Back to Home](.)

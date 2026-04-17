@@ -9,8 +9,9 @@ import (
 	"github.com/szaher/claude-monitor/internal/models"
 )
 
-// InsertSession inserts or updates a session. On conflict, it updates
-// ended_at, token counts, and estimated cost (upsert).
+// InsertSession inserts a session or updates metadata on conflict.
+// Token counts and cost are NOT touched on conflict — they are managed
+// exclusively by incrementSessionTokens (real-time) or UpdateSessionTokens (import).
 func InsertSession(db *sql.DB, s *models.Session) error {
 	if s.ProjectName == "" {
 		s.ProjectName = filepath.Base(s.ProjectPath)
@@ -30,12 +31,10 @@ func InsertSession(db *sql.DB, s *models.Session) error {
 			total_cache_write_tokens, estimated_cost_usd
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
-			ended_at = excluded.ended_at,
-			total_input_tokens = excluded.total_input_tokens,
-			total_output_tokens = excluded.total_output_tokens,
-			total_cache_read_tokens = excluded.total_cache_read_tokens,
-			total_cache_write_tokens = excluded.total_cache_write_tokens,
-			estimated_cost_usd = excluded.estimated_cost_usd
+			ended_at = COALESCE(excluded.ended_at, ended_at),
+			cwd = CASE WHEN excluded.cwd != '' THEN excluded.cwd ELSE cwd END,
+			git_branch = CASE WHEN excluded.git_branch != '' THEN excluded.git_branch ELSE git_branch END,
+			claude_version = CASE WHEN excluded.claude_version != '' THEN excluded.claude_version ELSE claude_version END
 	`,
 		s.ID, s.ProjectPath, s.ProjectName, s.CWD, s.GitBranch,
 		s.StartedAt.UTC().Format(time.RFC3339), endedAt,
@@ -46,6 +45,25 @@ func InsertSession(db *sql.DB, s *models.Session) error {
 	)
 	if err != nil {
 		return fmt.Errorf("insert session: %w", err)
+	}
+	return nil
+}
+
+// UpdateSessionTokens sets the accumulated token counts and cost for a session.
+// Used by the import command after processing all messages.
+func UpdateSessionTokens(db *sql.DB, sessionID string, inputTokens, outputTokens, cacheRead, cacheWrite int, cost float64) error {
+	_, err := db.Exec(`
+		UPDATE sessions SET
+			total_input_tokens = ?,
+			total_output_tokens = ?,
+			total_cache_read_tokens = ?,
+			total_cache_write_tokens = ?,
+			estimated_cost_usd = ?
+		WHERE id = ?`,
+		inputTokens, outputTokens, cacheRead, cacheWrite, cost, sessionID,
+	)
+	if err != nil {
+		return fmt.Errorf("update session tokens: %w", err)
 	}
 	return nil
 }

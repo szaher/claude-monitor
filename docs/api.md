@@ -1,6 +1,7 @@
 ---
 layout: default
 title: API Reference
+nav_order: 5
 ---
 
 # API Reference
@@ -367,5 +368,3 @@ Real-time event stream. Events are JSON objects with a `hook_event_name` field:
 - `SubagentStop` -- Agent completed
 - `Notification` -- System notification
 - `TaskStart` / `TaskComplete` / `TaskUpdate` -- Task lifecycle events
-
-[Back to Home](.)

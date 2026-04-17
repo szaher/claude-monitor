@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Dashboard & UI
+nav_order: 4
 ---
 
 # Web Dashboard
@@ -88,5 +89,3 @@ Cost tracking and budgeting.
 - Theme selection (auto, light, dark)
 - Model pricing configuration
 - Data retention settings
-
-[Back to Home](.)
