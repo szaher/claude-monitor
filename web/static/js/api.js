@@ -138,6 +138,16 @@ const API = {
         return API.get('/api/stats/project-breakdown', { project: projectPath });
     },
 
+    /** Get user prompts with truncated preview. */
+    getPrompts(params) {
+        return API.get('/api/prompts', params);
+    },
+
+    /** Get full prompt detail by ID. */
+    getPromptDetail(id) {
+        return API.get(`/api/prompts/${id}`);
+    },
+
     /** Full-text search. */
     search(q, limit) {
         return API.get('/api/search', { q, limit });

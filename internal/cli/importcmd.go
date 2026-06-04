@@ -113,7 +113,7 @@ func Import(args []string) error {
 			return nil
 		}
 
-		// Create session from first entry's metadata
+		// Create session from entries' metadata
 		first := entries[0]
 		session := &models.Session{
 			ID:             sessionID,
@@ -121,13 +121,12 @@ func Import(args []string) error {
 			ProjectName:    projectName,
 			CWD:            first.CWD,
 			GitBranch:      first.GitBranch,
-			StartedAt:      first.Timestamp,
 			ClaudeVersion:  first.Version,
 			EntryPoint:     first.EntryPoint,
 			PermissionMode: first.PermissionMode,
 		}
 
-		// Scan entries to determine the effective session ID and metadata
+		// Scan entries to find session ID, metadata, and the first valid timestamp
 		for _, entry := range entries {
 			if entry.SessionID != "" {
 				session.ID = entry.SessionID
@@ -141,6 +140,9 @@ func Import(args []string) error {
 			if session.GitBranch == "" && entry.GitBranch != "" {
 				session.GitBranch = entry.GitBranch
 			}
+			if session.StartedAt.IsZero() && !entry.Timestamp.IsZero() {
+				session.StartedAt = entry.Timestamp
+			}
 		}
 
 		// Prefer CWD from entries over decoded directory name for project path,
@@ -152,7 +154,7 @@ func Import(args []string) error {
 
 		// Find the last entry timestamp for ended_at
 		last := entries[len(entries)-1]
-		if last.Timestamp.After(first.Timestamp) {
+		if !last.Timestamp.IsZero() && last.Timestamp.After(session.StartedAt) {
 			session.EndedAt = &last.Timestamp
 		}
 
@@ -297,6 +299,16 @@ func Import(args []string) error {
 
 	if err != nil {
 		return fmt.Errorf("walk projects directory: %w", err)
+	}
+
+	// Repair sessions with zero start dates using their earliest message timestamp
+	repaired, _ := database.Exec(`
+		UPDATE sessions SET started_at = (
+			SELECT MIN(m.timestamp) FROM messages m WHERE m.session_id = sessions.id
+		) WHERE started_at <= '0001-01-02T00:00:00Z'
+		AND EXISTS (SELECT 1 FROM messages m WHERE m.session_id = sessions.id)`)
+	if n, _ := repaired.RowsAffected(); n > 0 {
+		fmt.Printf("Repaired %d sessions with missing start dates\n", n)
 	}
 
 	fmt.Printf("Imported %d sessions, %d messages, %d tool calls\n",

@@ -902,6 +902,15 @@ pre code {
 .font-mono   { font-family: var(--font-mono); }
 .truncate    { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+.prompt-preview {
+    max-width: 500px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
 .hidden { display: none !important; }
 .block  { display: block; }
 .inline { display: inline; }

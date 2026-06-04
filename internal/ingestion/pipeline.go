@@ -518,13 +518,18 @@ func (p *Pipeline) ensureSession(entry *parser.LogEntry) error {
 		projectName = "unknown"
 	}
 
+	startedAt := entry.Timestamp
+	if startedAt.IsZero() {
+		startedAt = time.Now().UTC()
+	}
+
 	session := &models.Session{
 		ID:             entry.SessionID,
 		ProjectPath:    projectPath,
 		ProjectName:    projectName,
 		CWD:            entry.CWD,
 		GitBranch:      entry.GitBranch,
-		StartedAt:      entry.Timestamp,
+		StartedAt:      startedAt,
 		ClaudeVersion:  entry.Version,
 		EntryPoint:     entry.EntryPoint,
 		PermissionMode: entry.PermissionMode,

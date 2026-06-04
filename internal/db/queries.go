@@ -31,6 +31,8 @@ func InsertSession(db *sql.DB, s *models.Session) error {
 			total_cache_write_tokens, estimated_cost_usd
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
+			started_at = CASE WHEN started_at <= '0001-01-02T00:00:00Z' AND excluded.started_at > '0001-01-02T00:00:00Z'
+				THEN excluded.started_at ELSE started_at END,
 			ended_at = COALESCE(excluded.ended_at, ended_at),
 			cwd = CASE WHEN excluded.cwd != '' THEN excluded.cwd ELSE cwd END,
 			git_branch = CASE WHEN excluded.git_branch != '' THEN excluded.git_branch ELSE git_branch END,

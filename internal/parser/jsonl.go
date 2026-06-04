@@ -108,9 +108,8 @@ func ParseLogFile(r io.Reader) ([]*LogEntry, error) {
 	var entries []*LogEntry
 
 	scanner := bufio.NewScanner(r)
-	// Set a large buffer to handle big log lines (up to 1MB).
 	buf := make([]byte, 0, 64*1024)
-	scanner.Buffer(buf, 1024*1024)
+	scanner.Buffer(buf, 10*1024*1024)
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())

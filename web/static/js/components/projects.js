@@ -6,11 +6,18 @@ const ProjectsPage = {
     charts: {},
     currentView: 'list',
     selectedProject: null,
+    selectedPrompt: null,
     sortCol: 'sessions',
     sortDir: 'desc',
+    promptsOffset: 0,
+    promptsLimit: 20,
+    promptsTotal: 0,
+    promptsLoaded: [],
 
     async render(container) {
-        if (this.currentView === 'detail' && this.selectedProject) {
+        if (this.currentView === 'prompt' && this.selectedPrompt) {
+            await this.renderPromptDetail(container);
+        } else if (this.currentView === 'detail' && this.selectedProject) {
             await this.renderDetail(container);
         } else {
             await this.renderList(container);
@@ -254,12 +261,21 @@ const ProjectsPage = {
                     <div class="card-header"><h3>Sessions</h3></div>
                     <div id="project-sessions-table"></div>
                 </div>
+
+                <!-- Prompts -->
+                <div class="card mt-2">
+                    <div class="card-header"><h3>Prompts</h3></div>
+                    <div id="project-prompts"></div>
+                </div>
             `;
 
             this.renderBreakdownSection(breakdown);
             this.renderDetailSessionsChart(sessions);
             this.renderDetailTokensChart(sessions);
             this.renderDetailSessionsTable(sessions);
+            this.promptsOffset = 0;
+            this.promptsLoaded = [];
+            this.loadPrompts();
 
             // Add after this.renderDetailSessionsTable(sessions);
             const heatmap = await API.getFileHeatmap(this.selectedProject).catch(() => null);
@@ -567,6 +583,205 @@ const ProjectsPage = {
                 window.location.hash = 'sessions';
             });
         });
+    },
+
+    /* ------------------------------------------------------------------
+       Prompts
+    ------------------------------------------------------------------ */
+    async loadPrompts() {
+        const el = document.getElementById('project-prompts');
+        if (!el) return;
+
+        if (this.promptsOffset === 0) {
+            el.innerHTML = '<div class="loading-spinner"></div>';
+        }
+
+        try {
+            const data = await API.getPrompts({
+                project: this.selectedProject,
+                limit: this.promptsLimit,
+                offset: this.promptsOffset,
+            });
+
+            const prompts = (data && data.prompts) || [];
+            this.promptsTotal = (data && data.total) || 0;
+            this.promptsLoaded = this.promptsLoaded.concat(prompts);
+            this.renderPrompts(el);
+        } catch (err) {
+            el.innerHTML = `<div class="empty-state"><p>Error loading prompts: ${this._esc(err.message)}</p></div>`;
+        }
+    },
+
+    renderPrompts(el) {
+        if (this.promptsLoaded.length === 0) {
+            el.innerHTML = '<div class="empty-state"><p>No prompts found for this project</p></div>';
+            return;
+        }
+
+        const rows = this.promptsLoaded.map(p => {
+            const preview = this._esc(p.preview || '').replace(/\n/g, ' ');
+            const ts = this._formatPromptTime(p.timestamp);
+            return `
+                <tr class="cursor-pointer prompt-row" data-prompt-id="${this._esc(p.id)}">
+                    <td style="white-space:nowrap;">${ts}</td>
+                    <td class="text-muted text-sm font-mono" style="white-space:nowrap;">${this._esc((p.session_id || '').slice(0, 8))}</td>
+                    <td class="prompt-preview">${preview}${p.truncated ? '<span class="text-muted">...</span>' : ''}</td>
+                </tr>
+            `;
+        }).join('');
+
+        const hasMore = this.promptsLoaded.length < this.promptsTotal;
+
+        el.innerHTML = `
+            <div class="text-muted text-sm mb-1" style="padding:0 12px;">${this.promptsTotal} prompt${this.promptsTotal !== 1 ? 's' : ''}</div>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:140px;">Time</th>
+                            <th style="width:80px;">Session</th>
+                            <th>Prompt</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+            ${hasMore ? `<div style="padding:12px;text-align:center;">
+                <button id="load-more-prompts" class="btn btn-secondary btn-sm">
+                    Load More (${this.promptsLoaded.length} of ${this.promptsTotal})
+                </button>
+            </div>` : ''}
+        `;
+
+        el.querySelectorAll('.prompt-row').forEach(row => {
+            row.addEventListener('click', () => {
+                this.selectedPrompt = row.dataset.promptId;
+                this.currentView = 'prompt';
+                const c = document.getElementById('main-content');
+                c.innerHTML = '';
+                this.render(c);
+            });
+        });
+
+        const loadMoreBtn = document.getElementById('load-more-prompts');
+        if (loadMoreBtn) {
+            loadMoreBtn.addEventListener('click', () => {
+                this.promptsOffset += this.promptsLimit;
+                this.loadPrompts();
+            });
+        }
+    },
+
+    async renderPromptDetail(container) {
+        container.innerHTML = `
+            <div class="projects-detail">
+                <div class="mb-2">
+                    <button id="back-to-project" class="btn btn-secondary btn-sm">&larr; Back to Project</button>
+                </div>
+                <div id="prompt-detail-content">
+                    <div class="loading-spinner"></div>
+                </div>
+            </div>
+        `;
+
+        document.getElementById('back-to-project').addEventListener('click', () => {
+            this.currentView = 'detail';
+            this.selectedPrompt = null;
+            const c = document.getElementById('main-content');
+            c.innerHTML = '';
+            this.render(c);
+        });
+
+        try {
+            const p = await API.getPromptDetail(this.selectedPrompt);
+            const el = document.getElementById('prompt-detail-content');
+            if (!el) return;
+
+            const ts = this._formatPromptTime(p.timestamp);
+            const totalTokens = (p.input_tokens || 0) + (p.output_tokens || 0);
+
+            el.innerHTML = `
+                <div class="card">
+                    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+                        <h3>Prompt</h3>
+                        <div class="flex items-center gap-1">
+                            <span class="text-muted text-sm">${ts}</span>
+                            <span class="badge badge-info cursor-pointer" id="goto-session"
+                                title="View session">${this._esc((p.session_id || '').slice(0, 8))}</span>
+                        </div>
+                    </div>
+                    <div style="padding:0 16px;">
+                        <div class="card-grid" style="grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));margin-bottom:12px;">
+                            <div style="text-align:center;">
+                                <div style="font-weight:700;">${this._esc(p.project_name || '-')}</div>
+                                <div class="text-muted text-sm">Project</div>
+                            </div>
+                            <div style="text-align:center;">
+                                <div style="font-weight:700;">${formatTokens(p.input_tokens)}</div>
+                                <div class="text-muted text-sm">Input Tokens</div>
+                            </div>
+                            <div style="text-align:center;">
+                                <div style="font-weight:700;">${formatTokens(p.cache_read_tokens)}</div>
+                                <div class="text-muted text-sm">Cache Read</div>
+                            </div>
+                            <div style="text-align:center;">
+                                <div style="font-weight:700;">${formatTokens(totalTokens)}</div>
+                                <div class="text-muted text-sm">Total Tokens</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="padding:0 16px 16px;">
+                        <div style="background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:var(--radius-sm);padding:16px;white-space:pre-wrap;word-break:break-word;font-family:var(--font-mono);font-size:0.85rem;max-height:600px;overflow-y:auto;line-height:1.6;">${this._esc(p.content_text || '')}</div>
+                    </div>
+                </div>
+
+                ${p.response_preview ? `
+                <div class="card mt-2">
+                    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+                        <h3>Response</h3>
+                        <div class="flex items-center gap-1">
+                            ${p.response_model ? `<span class="badge badge-neutral">${this._esc(p.response_model)}</span>` : ''}
+                            <span class="text-muted text-sm">${formatTokens(p.response_output_tokens)} output tokens</span>
+                        </div>
+                    </div>
+                    <div style="padding:0 16px 16px;">
+                        <div style="background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:var(--radius-sm);padding:16px;white-space:pre-wrap;word-break:break-word;font-family:var(--font-mono);font-size:0.85rem;line-height:1.6;color:var(--text-secondary);">${this._esc(p.response_preview)}${p.response_preview.length >= 300 ? '<span class="text-muted">...</span>' : ''}</div>
+                        <div class="text-muted text-sm mt-1">Preview only. <span class="cursor-pointer" style="color:var(--accent-primary);" id="goto-session-full">View full session</span> for complete response.</div>
+                    </div>
+                </div>` : ''}
+            `;
+
+            const gotoSession = (sid) => {
+                if (typeof SessionsPage !== 'undefined') {
+                    SessionsPage.selectedSession = sid;
+                    SessionsPage.currentView = 'detail';
+                }
+                window.location.hash = 'sessions';
+            };
+
+            const sessionBtn = document.getElementById('goto-session');
+            if (sessionBtn) sessionBtn.addEventListener('click', () => gotoSession(p.session_id));
+            const sessionLink = document.getElementById('goto-session-full');
+            if (sessionLink) sessionLink.addEventListener('click', () => gotoSession(p.session_id));
+
+        } catch (err) {
+            const el = document.getElementById('prompt-detail-content');
+            if (el) el.innerHTML = `<div class="empty-state"><h3>Error</h3><p>${this._esc(err.message)}</p></div>`;
+        }
+    },
+
+    _formatPromptTime(iso) {
+        try {
+            const d = new Date(iso);
+            if (isNaN(d.getTime())) return '-';
+            return d.toLocaleString('en-US', {
+                month: 'short', day: 'numeric',
+                hour: '2-digit', minute: '2-digit',
+                hour12: false,
+            });
+        } catch (_) {
+            return '-';
+        }
     },
 
     /* ---- Helpers ---- */

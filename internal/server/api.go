@@ -449,12 +449,19 @@ func (s *Server) handleDailyStats(w http.ResponseWriter, r *http.Request) {
 	days := intParam(r, "days", 90)
 
 	rows, err := s.db.Query(`
-		SELECT date(started_at) as day,
+		SELECT date(effective_start) as day,
 			COUNT(*) as sessions,
 			COALESCE(SUM(total_input_tokens + total_output_tokens), 0) as tokens,
 			COALESCE(SUM(estimated_cost_usd), 0) as cost
-		FROM sessions
-		WHERE started_at >= datetime('now', ?)
+		FROM (
+			SELECT s.*,
+				CASE WHEN s.started_at <= '0001-01-02T00:00:00Z'
+					THEN COALESCE((SELECT MIN(m.timestamp) FROM messages m WHERE m.session_id = s.id), s.started_at)
+					ELSE s.started_at
+				END as effective_start
+			FROM sessions s
+		)
+		WHERE effective_start >= datetime('now', ?)
 		GROUP BY day
 		ORDER BY day ASC
 	`, fmt.Sprintf("-%d days", days))
@@ -1166,6 +1173,167 @@ func (s *Server) queryBreakdownByProject(project string) (map[string]interface{}
 		"mcp_servers": mcpServers,
 		"agents":      agents,
 	}, nil
+}
+
+// handlePrompts handles GET /api/prompts — list user prompts with truncated content.
+// Supports project and session_id filters, pagination via limit/offset, and returns total count.
+func (s *Server) handlePrompts(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	project := r.URL.Query().Get("project")
+	sessionID := r.URL.Query().Get("session_id")
+	limit := intParam(r, "limit", 20)
+	offset := intParam(r, "offset", 0)
+	maxPreview := intParam(r, "preview_len", 200)
+
+	whereClauses := []string{"m.type = 'user'"}
+	var args []interface{}
+
+	if project != "" {
+		whereClauses = append(whereClauses, "s.project_path = ?")
+		args = append(args, project)
+	}
+	if sessionID != "" {
+		whereClauses = append(whereClauses, "m.session_id = ?")
+		args = append(args, sessionID)
+	}
+
+	where := "WHERE " + strings.Join(whereClauses, " AND ")
+
+	// Count total
+	var total int
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM messages m JOIN sessions s ON s.id = m.session_id %s", where)
+	s.db.QueryRow(countQuery, args...).Scan(&total)
+
+	// Fetch prompts
+	query := fmt.Sprintf(`
+		SELECT m.id, m.session_id, s.project_name, s.project_path,
+			m.content_text, m.timestamp
+		FROM messages m
+		JOIN sessions s ON s.id = m.session_id
+		%s
+		ORDER BY m.timestamp DESC
+		LIMIT ? OFFSET ?`, where)
+
+	queryArgs := append(append([]interface{}{}, args...), limit, offset)
+	rows, err := s.db.Query(query, queryArgs...)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "query prompts: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	prompts := []map[string]interface{}{}
+	for rows.Next() {
+		var id, sessionID, projectName, projectPath, timestamp string
+		var contentText sql.NullString
+
+		if err := rows.Scan(&id, &sessionID, &projectName, &projectPath, &contentText, &timestamp); err != nil {
+			writeError(w, http.StatusInternalServerError, "scan prompt: "+err.Error())
+			return
+		}
+
+		text := contentText.String
+		truncated := false
+		if len(text) > maxPreview {
+			text = text[:maxPreview]
+			truncated = true
+		}
+
+		prompts = append(prompts, map[string]interface{}{
+			"id":           id,
+			"session_id":   sessionID,
+			"project_name": projectName,
+			"project_path": projectPath,
+			"preview":      text,
+			"truncated":    truncated,
+			"timestamp":    timestamp,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"prompts": prompts,
+		"total":   total,
+	})
+}
+
+// handlePromptDetail handles GET /api/prompts/{id} — full prompt content.
+func (s *Server) handlePromptDetail(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	id := strings.TrimPrefix(r.URL.Path, "/api/prompts/")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "missing prompt id")
+		return
+	}
+
+	var sessionID, msgType, timestamp string
+	var parentID, role, model, contentText, contentJSON, stopReason sql.NullString
+	var inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens int
+
+	err := s.db.QueryRow(`
+		SELECT m.id, m.session_id, m.parent_id, m.type, m.role, m.model,
+			m.content_text, m.content_json, m.stop_reason,
+			m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_write_tokens,
+			m.timestamp
+		FROM messages m WHERE m.id = ?`, id,
+	).Scan(&id, &sessionID, &parentID, &msgType, &role, &model,
+		&contentText, &contentJSON, &stopReason,
+		&inputTokens, &outputTokens, &cacheReadTokens, &cacheWriteTokens,
+		&timestamp)
+
+	if err == sql.ErrNoRows {
+		writeError(w, http.StatusNotFound, "prompt not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "query prompt: "+err.Error())
+		return
+	}
+
+	// Get session metadata
+	var projectName, projectPath string
+	s.db.QueryRow("SELECT project_name, project_path FROM sessions WHERE id = ?", sessionID).Scan(&projectName, &projectPath)
+
+	// Get the assistant response (next message in conversation)
+	var responsePreview sql.NullString
+	var responseModel sql.NullString
+	var responseOutputTokens int
+	s.db.QueryRow(`
+		SELECT SUBSTR(content_text, 1, 300), model, output_tokens
+		FROM messages
+		WHERE session_id = ? AND type = 'assistant' AND timestamp > ?
+		ORDER BY timestamp ASC LIMIT 1`,
+		sessionID, timestamp,
+	).Scan(&responsePreview, &responseModel, &responseOutputTokens)
+
+	result := map[string]interface{}{
+		"id":                 id,
+		"session_id":         sessionID,
+		"project_name":       projectName,
+		"project_path":       projectPath,
+		"type":               msgType,
+		"role":               role.String,
+		"content_text":       contentText.String,
+		"timestamp":          timestamp,
+		"input_tokens":       inputTokens,
+		"output_tokens":      outputTokens,
+		"cache_read_tokens":  cacheReadTokens,
+		"cache_write_tokens": cacheWriteTokens,
+	}
+	if responsePreview.Valid {
+		result["response_preview"] = responsePreview.String
+		result["response_model"] = responseModel.String
+		result["response_output_tokens"] = responseOutputTokens
+	}
+
+	writeJSON(w, http.StatusOK, result)
 }
 
 // --- Helper query functions ---

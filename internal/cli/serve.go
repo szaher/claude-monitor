@@ -219,7 +219,7 @@ func startWatcherBridge(logEventCh <-chan *ingestion.LogFileEvent, eventCh chan<
 
 			scanner := bufio.NewScanner(f)
 			buf := make([]byte, 0, 64*1024)
-			scanner.Buffer(buf, 1024*1024)
+			scanner.Buffer(buf, 10*1024*1024)
 
 			for scanner.Scan() {
 				line := scanner.Bytes()
@@ -232,8 +232,10 @@ func startWatcherBridge(logEventCh <-chan *ingestion.LogFileEvent, eventCh chan<
 				select {
 				case eventCh <- lineCopy:
 				default:
-					// Channel full, drop to avoid blocking
 				}
+			}
+			if err := scanner.Err(); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: scanner error for %s: %v\n", event.Path, err)
 			}
 
 			// Update offset to current position

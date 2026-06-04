@@ -54,6 +54,8 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/api/budgets/status", s.budgetStatus)
 	s.mux.HandleFunc("/api/budgets/", s.handleBudgetDetail)
 	s.mux.HandleFunc("/api/budgets", s.handleBudgets)
+	s.mux.HandleFunc("/api/prompts/", s.handlePromptDetail)
+	s.mux.HandleFunc("/api/prompts", s.handlePrompts)
 	s.mux.HandleFunc("/api/tags", s.handleTags)
 	s.mux.HandleFunc("/api/git-sync", s.handleGitSync)
 	s.mux.HandleFunc("/api/config", s.handleConfig)
