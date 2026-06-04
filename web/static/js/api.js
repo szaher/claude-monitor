@@ -206,6 +206,11 @@ const API = {
         return API.post('/api/git-sync', { session_id: sessionId });
     },
 
+    /** Get insights metrics with period comparison. */
+    getInsightsStats(params) {
+        return API.get('/api/stats/insights', params);
+    },
+
     /** Build an export download URL with the given params. */
     getExportURL(params) {
         const url = new URL('/api/export', window.location.origin);

@@ -21,6 +21,7 @@ const App = {
         agents:    typeof AgentsPage    !== 'undefined' ? AgentsPage    : null,
         projects:  typeof ProjectsPage  !== 'undefined' ? ProjectsPage  : null,
         cost:      typeof CostPage      !== 'undefined' ? CostPage      : null,
+        insights:  typeof InsightsPage  !== 'undefined' ? InsightsPage  : null,
         settings:  typeof SettingsPage  !== 'undefined' ? SettingsPage  : null,
     },
 
