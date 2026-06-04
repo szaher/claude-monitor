@@ -51,6 +51,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/api/stats/token-efficiency", s.handleTokenEfficiency)
 	s.mux.HandleFunc("/api/stats/prompt-patterns", s.handlePromptPatterns)
 	s.mux.HandleFunc("/api/stats/file-heatmap", s.handleFileHeatmap)
+	s.mux.HandleFunc("/api/stats/insights", s.handleInsightsStats)
 	s.mux.HandleFunc("/api/budgets/status", s.budgetStatus)
 	s.mux.HandleFunc("/api/budgets/", s.handleBudgetDetail)
 	s.mux.HandleFunc("/api/budgets", s.handleBudgets)
