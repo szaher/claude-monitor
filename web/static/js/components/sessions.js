@@ -436,6 +436,7 @@ const SessionsPage = {
                             <span style="color:#f59e0b">&#9679; Tool</span>
                             <span style="color:#a855f7">&#9679; Agent</span>
                             <span style="color:#ef4444">&#9679; Error</span>
+                            <span style="color:#6b7280">&#9679; Compaction</span>
                         </div>
                     </div>
                 </div>`;
@@ -485,6 +486,12 @@ const SessionsPage = {
                         }
                     });
                 });
+
+                // Clean up previous observer if re-loading detail
+                if (this._timelineObserver) {
+                    this._timelineObserver.disconnect();
+                    this._timelineObserver = null;
+                }
 
                 // Scroll-synced timeline highlighting
                 const timelineObserver = new IntersectionObserver((entries) => {
