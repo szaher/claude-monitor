@@ -434,6 +434,35 @@ const SessionsPage = {
                         }
                     });
                 });
+
+                // Scroll-synced timeline highlighting
+                const timelineObserver = new IntersectionObserver((entries) => {
+                    let topmost = null;
+                    let topmostY = Infinity;
+
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            const rect = entry.boundingClientRect;
+                            if (rect.top < topmostY) {
+                                topmostY = rect.top;
+                                topmost = entry.target;
+                            }
+                        }
+                    });
+
+                    if (topmost) {
+                        const ts = topmost.dataset.eventTs;
+                        area.querySelectorAll('.timeline-dot').forEach(d => {
+                            d.style.borderColor = (d.dataset.eventTs === ts) ? '#fff' : 'transparent';
+                        });
+                    }
+                }, { threshold: 0.5 });
+
+                area.querySelectorAll('.conversation-thread [data-event-ts]').forEach(el => {
+                    timelineObserver.observe(el);
+                });
+
+                this._timelineObserver = timelineObserver;
             }
 
             // Git Commits section
@@ -769,6 +798,13 @@ const SessionsPage = {
             }
         } catch (_) {
             return '';
+        }
+    },
+
+    destroy() {
+        if (this._timelineObserver) {
+            this._timelineObserver.disconnect();
+            this._timelineObserver = null;
         }
     },
 };
