@@ -211,6 +211,11 @@ const API = {
         return API.get('/api/stats/insights', params);
     },
 
+    /** Compare two sessions side-by-side. */
+    getSessionComparison(a, b) {
+        return API.get('/api/sessions/compare', { a, b });
+    },
+
     /** Build an export download URL with the given params. */
     getExportURL(params) {
         const url = new URL('/api/export', window.location.origin);

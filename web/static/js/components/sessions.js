@@ -165,8 +165,9 @@ const SessionsPage = {
     async renderDetail(container) {
         container.innerHTML = `
             <div class="sessions-detail">
-                <div class="mb-2">
+                <div class="mb-2" style="display:flex;gap:8px;">
                     <button id="back-to-list" class="btn btn-secondary btn-sm">&larr; Back to Sessions</button>
+                    <button id="compare-session" class="btn btn-secondary btn-sm">&#8644; Compare</button>
                 </div>
                 <div id="session-detail-content">
                     <div class="loading-spinner"></div>
@@ -180,6 +181,10 @@ const SessionsPage = {
             const c = document.getElementById('main-content');
             c.innerHTML = '';
             this.render(c);
+        });
+
+        document.getElementById('compare-session').addEventListener('click', () => {
+            window.location.hash = 'compare?a=' + this.selectedSession;
         });
 
         await this.loadDetail();

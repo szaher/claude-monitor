@@ -28,7 +28,10 @@ const InsightsPage = {
     template() {
         return `
             <div class="insights-page">
-                <h2>Insights</h2>
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <h2 style="margin:0;">Insights</h2>
+                    <a href="#compare" style="font-size:0.85rem;color:var(--text-muted);">&#8644; Compare two sessions</a>
+                </div>
 
                 <!-- Controls -->
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">

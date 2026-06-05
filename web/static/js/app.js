@@ -22,6 +22,7 @@ const App = {
         projects:  typeof ProjectsPage  !== 'undefined' ? ProjectsPage  : null,
         cost:      typeof CostPage      !== 'undefined' ? CostPage      : null,
         insights:  typeof InsightsPage  !== 'undefined' ? InsightsPage  : null,
+        compare:   typeof ComparePage   !== 'undefined' ? ComparePage   : null,
         settings:  typeof SettingsPage  !== 'undefined' ? SettingsPage  : null,
     },
 
