@@ -337,14 +337,65 @@ const SessionsPage = {
                 </div>
             `;
 
-            // Conversation thread
+            // Merge compaction events into message stream for inline display
+            const compactionEvents = (timeline && timeline.events)
+                ? timeline.events.filter(e => e.type === 'compaction')
+                : [];
+
+            const mergedStream = [
+                ...messages.map(m => ({ kind: 'message', data: m, ts: m.timestamp })),
+                ...compactionEvents.map(c => ({ kind: 'compaction', data: c, ts: c.timestamp })),
+            ].sort((a, b) => new Date(a.ts) - new Date(b.ts));
+
+            // Conversation thread with time deltas, turn dividers, and compaction indicators
             let threadHTML = '<div class="conversation-thread">';
 
             if (messages.length === 0) {
                 threadHTML += '<div class="empty-state"><p>No messages in this session</p></div>';
             } else {
-                messages.forEach(msg => {
+                let prevTimestamp = null;
+                let turnNumber = 0;
+
+                mergedStream.forEach((item) => {
+                    if (item.kind === 'compaction') {
+                        const c = item.data;
+                        const pre = (c.pre_tokens || 0).toLocaleString();
+                        const post = (c.post_tokens || 0).toLocaleString();
+                        const reason = c.trigger_reason ? ' — ' + this._esc(c.trigger_reason) : '';
+                        const dur = c.duration_ms ? ' (' + c.duration_ms + 'ms)' : '';
+                        threadHTML += `
+                            <div class="compaction-indicator" data-event-ts="${this._esc(c.timestamp)}" data-event-type="compaction"
+                                 style="text-align:center;padding:8px;margin:8px 0;background:var(--bg-secondary);border-radius:4px;border:1px dashed var(--border-color);font-size:0.8rem;color:var(--text-muted);">
+                                Context compacted: ${pre} → ${post} tokens${reason}${dur}
+                            </div>
+                        `;
+                        prevTimestamp = c.timestamp;
+                        return;
+                    }
+
+                    const msg = item.data;
+                    const role = msg.role || msg.type || 'unknown';
+                    const isUser = role === 'user' || msg.type === 'user';
+
+                    if (isUser) {
+                        turnNumber++;
+                        if (turnNumber > 1) {
+                            threadHTML += '<div class="turn-divider" style="border-top:1px solid var(--border-color);margin:12px 0 8px 0;padding-top:4px;"><span style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Turn ' + turnNumber + '</span></div>';
+                        } else {
+                            threadHTML += '<div class="turn-divider" style="margin:0 0 8px 0;"><span style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Turn 1</span></div>';
+                        }
+                    }
+
+                    if (prevTimestamp && msg.timestamp) {
+                        const delta = new Date(msg.timestamp) - new Date(prevTimestamp);
+                        const formatted = this._formatTimeDelta(delta);
+                        if (formatted) {
+                            threadHTML += '<div class="time-delta" style="text-align:center;padding:4px 0;font-size:0.7rem;color:var(--text-muted);">↓ ' + formatted + '</div>';
+                        }
+                    }
+
                     threadHTML += this.renderMessage(msg, toolCallMap, messageToolCalls);
+                    prevTimestamp = msg.timestamp;
                 });
             }
 
@@ -747,6 +798,18 @@ const SessionsPage = {
         if (h > 0) return `${h}h ${m}m`;
         if (m > 0) return `${m}m ${s}s`;
         return `${s}s`;
+    },
+
+    _formatTimeDelta(ms) {
+        if (ms < 1000) return null;
+        const sec = Math.floor(ms / 1000);
+        if (sec < 60) return sec + 's';
+        const min = Math.floor(sec / 60);
+        const remSec = sec % 60;
+        if (min < 60) return min + 'm ' + (remSec > 0 ? remSec + 's' : '');
+        const hr = Math.floor(min / 60);
+        const remMin = min % 60;
+        return hr + 'h ' + (remMin > 0 ? remMin + 'm' : '');
     },
 
     /** Minimal HTML escaping to avoid XSS in dynamic content. */
