@@ -505,7 +505,7 @@ const SessionsPage = {
 
         if (isUser) {
             html += `
-                <div class="msg msg-user">
+                <div class="msg msg-user" data-event-ts="${this._esc(msg.timestamp)}" data-event-type="user_message">
                     <div class="msg-header">
                         <span class="badge badge-info">User</span>
                         <span class="text-muted text-sm">${formatDate(msg.timestamp)}</span>
@@ -530,7 +530,7 @@ const SessionsPage = {
             }
 
             html += `
-                <div class="msg msg-assistant">
+                <div class="msg msg-assistant" data-event-ts="${this._esc(msg.timestamp)}" data-event-type="assistant_message">
                     <div class="msg-header">
                         <span class="badge badge-success">Assistant</span>
                         ${msg.model ? `<span class="badge badge-neutral text-sm">${this._esc(msg.model)}</span>` : ''}
@@ -557,7 +557,7 @@ const SessionsPage = {
         } else {
             // Unknown role
             html += `
-                <div class="msg msg-system">
+                <div class="msg msg-system" data-event-ts="${this._esc(msg.timestamp)}" data-event-type="${this._esc(role)}">
                     <div class="msg-header">
                         <span class="badge badge-neutral">${this._esc(role)}</span>
                         <span class="text-muted text-sm">${formatDate(msg.timestamp)}</span>
@@ -619,7 +619,7 @@ const SessionsPage = {
                 }
 
                 return `
-                    <div class="collapsible open msg-tool-use">
+                    <div class="collapsible open msg-tool-use" data-event-ts="${this._esc(block.timestamp || '')}" data-event-type="tool_call" data-tool-name="${this._esc(toolName)}">
                         <div class="collapsible-header">
                             <span class="collapsible-arrow"></span>
                             <span class="badge badge-warning">${this._esc(toolName)}</span>
