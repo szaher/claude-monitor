@@ -33,6 +33,7 @@ func New(db *sql.DB, cfg *config.Config, hub *Hub) *Server {
 func (s *Server) setupRoutes() {
 	// API routes
 	s.mux.HandleFunc("/api/sessions", s.handleSessions)
+	s.mux.HandleFunc("/api/sessions/compare", s.handleSessionCompare)
 	s.mux.HandleFunc("/api/sessions/", s.handleSessionDetail)
 	s.mux.HandleFunc("/api/messages", s.handleMessages)
 	s.mux.HandleFunc("/api/tool-calls", s.handleToolCalls)
