@@ -88,7 +88,7 @@ func (s *Server) handleSessionTimeline(w http.ResponseWriter, r *http.Request) {
 
 	// Context compactions
 	ccRows, _ := s.db.Query(`
-		SELECT pre_tokens, post_tokens, timestamp
+		SELECT pre_tokens, post_tokens, trigger_reason, duration_ms, timestamp
 		FROM context_compactions WHERE session_id = ?
 		ORDER BY timestamp ASC
 	`, sessionID)
@@ -96,12 +96,23 @@ func (s *Server) handleSessionTimeline(w http.ResponseWriter, r *http.Request) {
 		defer ccRows.Close()
 		for ccRows.Next() {
 			var pre, post int
+			var durationMS int
 			var ts string
-			ccRows.Scan(&pre, &post, &ts)
-			events = append(events, map[string]interface{}{
-				"type": "compaction", "timestamp": ts,
-				"pre_tokens": pre, "post_tokens": post,
-			})
+			var triggerReason *string
+			ccRows.Scan(&pre, &post, &triggerReason, &durationMS, &ts)
+			evt := map[string]interface{}{
+				"type":       "compaction",
+				"timestamp":  ts,
+				"pre_tokens": pre,
+				"post_tokens": post,
+			}
+			if triggerReason != nil {
+				evt["trigger_reason"] = *triggerReason
+			}
+			if durationMS > 0 {
+				evt["duration_ms"] = durationMS
+			}
+			events = append(events, evt)
 		}
 	}
 
