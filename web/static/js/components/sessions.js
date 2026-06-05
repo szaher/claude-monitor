@@ -376,7 +376,7 @@ const SessionsPage = {
                                     : (i / timeline.events.length * 100);
                                 const lane = { user_message: 10, assistant_message: 25, tool_call: 40, agent_spawn: 55, compaction: 55 }[evt.type] || 25;
                                 const label = evt.tool || evt.agent_type || evt.type.replace('_', ' ');
-                                return '<div style="position:absolute;left:' + Math.min(pct, 98) + '%;top:' + lane + 'px;width:8px;height:8px;border-radius:50%;background:' + color + ';cursor:pointer" title="' + this._esc(label) + ': ' + evt.timestamp + '"></div>';
+                                return '<div class="timeline-dot" data-event-idx="' + i + '" data-event-ts="' + this._esc(evt.timestamp) + '" style="position:absolute;left:' + Math.min(pct, 98) + '%;top:' + lane + 'px;width:12px;height:12px;border-radius:50%;background:' + color + ';cursor:pointer;transition:box-shadow 0.2s;border:2px solid transparent" title="' + this._esc(label) + ': ' + evt.timestamp + '"></div>';
                             }).join('')}
                         </div>
                         <div style="display:flex;gap:1rem;font-size:0.75rem;color:var(--text-secondary);margin-top:0.5rem">
@@ -393,6 +393,47 @@ const SessionsPage = {
                 if (threadEl) {
                     threadEl.insertAdjacentHTML('beforebegin', timelineHtml);
                 }
+
+                // Timeline dot click handlers
+                area.querySelectorAll('.timeline-dot').forEach(dot => {
+                    dot.addEventListener('click', () => {
+                        const ts = dot.dataset.eventTs;
+                        const idx = parseInt(dot.dataset.eventIdx, 10);
+                        const evt = timeline.events[idx];
+
+                        // Highlight this dot, unhighlight others
+                        area.querySelectorAll('.timeline-dot').forEach(d => {
+                            d.style.borderColor = 'transparent';
+                        });
+                        dot.style.borderColor = '#fff';
+
+                        // Find target element in conversation thread
+                        let target = null;
+                        if (evt && evt.type === 'tool_call' && evt.tool) {
+                            target = area.querySelector('[data-event-type="tool_call"][data-tool-name="' + CSS.escape(evt.tool) + '"]');
+                        }
+                        if (!target) {
+                            const candidates = area.querySelectorAll('[data-event-ts="' + CSS.escape(ts) + '"]');
+                            target = candidates[0];
+                        }
+
+                        if (target) {
+                            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                            // Auto-expand if collapsed tool call
+                            if (target.classList.contains('collapsible') && !target.classList.contains('open')) {
+                                target.classList.add('open');
+                            }
+
+                            // Flash highlight
+                            target.style.transition = 'background-color 0.3s';
+                            target.style.backgroundColor = 'rgba(59, 130, 246, 0.15)';
+                            setTimeout(() => {
+                                target.style.backgroundColor = '';
+                            }, 1000);
+                        }
+                    });
+                });
             }
 
             // Git Commits section
